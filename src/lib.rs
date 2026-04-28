@@ -39,7 +39,7 @@ pub fn transliterate_char(c: char) -> &'static str {
     match c {
         // A
         'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' |
-        'à' | 'á' | 'â' | 'ã' | 'ä' | 'å'          => "a",
+        'à' | 'á' | 'â' | 'ã' | 'ä' | 'å'             => "a",
         'Æ' | 'æ'                                     => "ae",
         // C
         'Ç' | 'ç'                                     => "c",
@@ -55,7 +55,7 @@ pub fn transliterate_char(c: char) -> &'static str {
         'Ñ' | 'ñ'                                     => "n",
         // O
         'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' |
-        'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø'            => "o",
+        'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø'             => "o",
         'Œ' | 'œ'                                     => "oe",
         // S
         'ß'                                           => "ss",
@@ -65,9 +65,9 @@ pub fn transliterate_char(c: char) -> &'static str {
         'Ù' | 'Ú' | 'Û' | 'Ü' |
         'ù' | 'ú' | 'û' | 'ü'                         => "u",
         // Y
-        'Ý' | 'Ÿ' | 'ý' | 'ÿ'                        => "y",
+        'Ý' | 'Ÿ' | 'ý' | 'ÿ'                         => "y",
         // Z
-        'Ź' | 'Ż' | 'Ž' | 'ź' | 'ż' | 'ž'           => "z",
+        'Ź' | 'Ż' | 'Ž' | 'ź' | 'ż' | 'ž'             => "z",
         // Anything else is a separator
         _                                             => "-",
     }
@@ -111,6 +111,26 @@ fn fix_underscore_dash(s: &str) -> String {
     current
 }
 
+/// Collapse any run of consecutive `_` characters into a single `_`.
+///
+/// Needed because removing `-` between two `_` (e.g. `_-_`) leaves `__`.
+fn collapse_underscores(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut prev_underscore = false;
+    for c in s.chars() {
+        if c == '_' {
+            if !prev_underscore {
+                out.push('_');
+            }
+            prev_underscore = true;
+        } else {
+            prev_underscore = false;
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// Remove leading and trailing `-` or `_` characters.
 fn trim_separators(s: &str) -> String {
     s.trim_matches(|c| c == '-' || c == '_').to_owned()
@@ -120,13 +140,15 @@ fn trim_separators(s: &str) -> String {
 ///
 /// Pipeline:
 /// 1. Transliterate every character.
-/// 2. Collapse consecutive dashes.
-/// 3. Remove `-` adjacent to `_`.
-/// 4. Trim leading / trailing `-` and `_`.
+/// 2. Collapse consecutive `-`.
+/// 3. Remove `-` adjacent to `_` (`_-` → `_`, `-_` → `_`).
+/// 4. Collapse consecutive `_` (step 3 can produce `__` from e.g. `_-_`).
+/// 5. Trim leading / trailing `-` and `_`.
 pub fn transform_stem(stem: &str) -> String {
     let raw: String = stem.chars().map(transliterate_char).collect();
     let collapsed = collapse_dashes(&raw);
     let fixed = fix_underscore_dash(&collapsed);
+    let fixed = collapse_underscores(&fixed);
     trim_separators(&fixed)
 }
 
