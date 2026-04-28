@@ -337,7 +337,16 @@ mod transform_filename_tests {
     fn extension_is_lowercased() {
         assert_eq!(transform_filename("document.PDF"),   "document.pdf");
         assert_eq!(transform_filename("image.JPEG"),     "image.jpeg");
-        assert_eq!(transform_filename("archive.TAR.GZ"), "archive-tar.gz"); // double ext
+    }
+
+    #[test]
+    fn double_extension_tar_gz_is_kept_together() {
+        assert_eq!(transform_filename("archive.TAR.GZ"),     "archive.tar.gz"); // known -> double ext
+        assert_eq!(transform_filename("archive.TOR.GZ"),     "archive-tor.gz"); // unknown -> simple ext
+        assert_eq!(transform_filename("Mon Archive.tar.gz"), "mon-archive.tar.gz");
+        assert_eq!(transform_filename("backup.TAR.BZ2"),     "backup.tar.bz2");
+        assert_eq!(transform_filename("backup.TAR.XZ"),      "backup.tar.xz");
+        assert_eq!(transform_filename("backup.TAR.ZST"),     "backup.tar.zst");
     }
 
     #[test]

@@ -152,10 +152,48 @@ pub fn transform_stem(stem: &str) -> String {
     trim_separators(&fixed)
 }
 
+/// Known compound extensions that must be kept together.
+/// Stored and matched in lowercase — add new ones here as needed.
+const DOUBLE_EXTENSIONS: &[&str] = &[
+    "tar.gz",
+    "tar.bz2",
+    "tar.xz",
+    "tar.zst",
+];
+
+/// Extract a compound extension if the filename ends with one of the known
+/// double extensions (case-insensitive), and return `(stem, ".compound.ext")`.
+/// Falls back to the standard single-extension split otherwise.
+fn split_extension(filename: &str) -> (&str, String) {
+    let lower = filename.to_ascii_lowercase();
+
+    for &double_ext in DOUBLE_EXTENSIONS {
+        let suffix = format!(".{}", double_ext);
+        if lower.ends_with(&suffix) {
+            let stem = &filename[..filename.len() - suffix.len()];
+            return (stem, suffix);
+        }
+    }
+
+    // Standard single-extension split via Path
+    let path = Path::new(filename);
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| format!(".{}", e.to_ascii_lowercase()))
+        .unwrap_or_default();
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(filename);
+    (stem, ext)
+}
+
 /// Transform a full filename (stem + extension).
 ///
-/// The extension is only lowercased (extensions are always plain ASCII in
-/// practice). The stem goes through the full `transform_stem` pipeline.
+/// Known compound extensions (e.g. `.tar.gz`) are preserved as a unit.
+/// All other extensions are simply lowercased.
+/// The stem goes through the full `transform_stem` pipeline.
 /// Hidden files (names starting with `.`) are returned unchanged.
 pub fn transform_filename(filename: &str) -> String {
     // Leave hidden files alone
@@ -163,19 +201,7 @@ pub fn transform_filename(filename: &str) -> String {
         return filename.to_owned();
     }
 
-    let path = Path::new(filename);
-
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| format!(".{}", e.to_ascii_lowercase()))
-        .unwrap_or_default();
-
-    let stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or(filename);
-
+    let (stem, ext) = split_extension(filename);
     let new_stem = transform_stem(stem);
 
     if new_stem.is_empty() {
