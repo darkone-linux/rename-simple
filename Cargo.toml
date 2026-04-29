@@ -1,6 +1,6 @@
 [package]
 name = "rename-simple"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Rename files by normalizing accented characters, spaces and special chars to clean ASCII slugs"
 
