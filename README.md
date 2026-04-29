@@ -1,9 +1,9 @@
-# The `rename-simple` cool tool
+# rename-simple
 
-A small Rust CLI tool that renames files in a directory to clean, ASCII-safe slugs.
+A small Rust CLI tool that renames files and directories to clean, ASCII-safe slugs.
 
 ```
-"   01_ Une     chaîne de      CARACtères.pdf" -> "01_une-chaine-de-caracteres.pdf"
+"   01_ Une     chaîne de      CARACtères.pdf" → "01-une-chaine-de-caracteres.pdf"
 ```
 
 ## What it does
@@ -33,24 +33,51 @@ rename-simple [OPTIONS] [DIR]
 | Option | Description |
 |---|---|
 | `DIR` | Directory to process (default: current directory) |
+| `-f`, `--files` | Rename files only |
+| `-d`, `--dirs` | Rename directories only |
 | `-n`, `--dry-run` | Preview renames without touching any file |
 | `-h`, `--help` | Print help |
 
 > **Coming soon:** `-r` for recursive processing.
 
-## Example output
+## Examples
 
-```
+### Basic usage
+
+```bash
 $ rename-simple --dry-run ~/Downloads
 
 Directory: /home/user/Downloads
 
-  01_ Introduction au Projet.PDF  →  01_introduction-au-projet.pdf
+  01_ Introduction au Projet.PDF  →  01-introduction-au-projet.pdf
   Réunion d'équipe (2024).docx    →  reunion-d-equipe-2024.docx
   backup.TAR.GZ                   →  backup.tar.gz
-  ⚠  CONFLICT – skipping 'note (1).txt': destination 'note-1.txt' already exists
+  Café Montréal.jpg               →  cafe-montreal.jpg
 
-3 file(s) would be renamed.
+4 file(s) would be renamed.
+```
+
+### Rename only directories
+
+```bash
+$ rename-simple --dirs ~/Projects
+
+  Mes Documents/           →  mes-documents/
+  workspace/               →  workspace/
+
+2 directory(ies) would be renamed.
+```
+
+### Actual rename (without dry-run)
+
+```bash
+$ rename-simple ~/Downloads
+
+  01_ Introduction au Projet.PDF  →  01-introduction-au-projet.pdf
+  Réunion d'équipe (2024).docx    →  reunion-d-equipe-2024.docx
+  Café Montreal.jpg               →  cafe-montreal.jpg
+
+3 file(s) renamed, 0 error(s).
 ```
 
 ## Running the tests
@@ -58,3 +85,7 @@ Directory: /home/user/Downloads
 ```bash
 cargo test
 ```
+
+## License
+
+MIT
