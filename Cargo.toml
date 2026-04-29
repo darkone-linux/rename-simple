@@ -3,6 +3,11 @@ name = "rename-simple"
 version = "0.2.0"
 edition = "2021"
 description = "Rename files by normalizing accented characters, spaces and special chars to clean ASCII slugs"
+license = "MIT"
+repository = "https://github.com/darkone-linux/rename-simple"
+readme = "README.md"
+keywords = ["rust", "cli", "rename"]
+categories = ["command-line-utilities"]
 
 [[bin]]
 name = "rename-simple"
