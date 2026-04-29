@@ -234,6 +234,17 @@ pub fn transform_filename(filename: &str) -> String {
 // Filesystem operations
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Controls which filesystem entries are processed by `compute_renames`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenameTarget {
+    /// Rename both files and directories (default).
+    All,
+    /// Rename files only (`-f`).
+    FilesOnly,
+    /// Rename directories only (`-d`).
+    DirsOnly,
+}
+
 /// A single rename operation computed (but not yet applied).
 #[derive(Debug, Clone)]
 pub struct RenameOp {
@@ -243,17 +254,25 @@ pub struct RenameOp {
 
 /// Walk `dir` (non-recursively) and return the list of renames to perform.
 ///
-/// Files whose name already matches the transformed result are skipped.
-/// Hidden files (names starting with `.`) are skipped.
-/// Directories are skipped (recursive mode is reserved for a future `-r` flag).
-pub fn compute_renames(dir: &Path) -> Result<Vec<RenameOp>, std::io::Error> {
+/// The `target` parameter controls whether files, directories, or both are
+/// considered. Hidden entries (names starting with `.`) are always skipped.
+pub fn compute_renames(dir: &Path, target: RenameTarget) -> Result<Vec<RenameOp>, std::io::Error> {
     let mut ops = Vec::new();
 
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
 
-        if !path.is_file() {
+        let is_file = path.is_file();
+        let is_dir = path.is_dir();
+
+        // Filter by target
+        let include = match target {
+            RenameTarget::All => is_file || is_dir,
+            RenameTarget::FilesOnly => is_file,
+            RenameTarget::DirsOnly => is_dir,
+        };
+        if !include {
             continue;
         }
 
@@ -262,11 +281,13 @@ pub fn compute_renames(dir: &Path) -> Result<Vec<RenameOp>, std::io::Error> {
             None => continue,
         };
 
-        // Skip hidden files
+        // Skip hidden entries
         if original.starts_with('.') {
             continue;
         }
 
+        // Directories have no extension: transform_filename degrades to
+        // transform_stem cleanly when there is no dot in the name.
         let renamed = transform_filename(&original);
 
         if renamed == original {

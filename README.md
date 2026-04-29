@@ -27,7 +27,7 @@ cargo install --path .
 ## Usage
 
 ```
-rename-files [OPTIONS] [DIR]
+rename-simple [OPTIONS] [DIR]
 ```
 
 | Option | Description |
@@ -41,7 +41,7 @@ rename-files [OPTIONS] [DIR]
 ## Example output
 
 ```
-$ rename-files --dry-run ~/Downloads
+$ rename-simple --dry-run ~/Downloads
 
 Directory: /home/user/Downloads
 

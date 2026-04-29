@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "rename-files"
+name = "rename-simple"
 version = "0.1.0"

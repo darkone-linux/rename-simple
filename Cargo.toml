@@ -1,11 +1,11 @@
 [package]
-name = "rename-files"
+name = "rename-simple"
 version = "0.1.0"
 edition = "2021"
 description = "Rename files by normalizing accented characters, spaces and special chars to clean ASCII slugs"
 
 [[bin]]
-name = "rename-files"
+name = "rename-simple"
 path = "src/main.rs"
 
 [lib]

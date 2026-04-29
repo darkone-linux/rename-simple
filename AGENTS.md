@@ -50,12 +50,12 @@ Arguments:
 
 Options:
   -n, --dry-run   Show what would be renamed without touching any file
+  -d, --dirs      Rename directory names only
+  -f, --files     Rename file names only
   -h, --help      Print this help message
 
 Planned (not yet implemented):
   -r, --recursive Process directories recursively
-  -d, --dirs      Rename directory names only
-  -f, --files     Rename file names only
 ```
 
 ---

@@ -1,4 +1,4 @@
-use rename_files::{compute_renames, RenameOp};
+use rename_files::{compute_renames, RenameOp, RenameTarget};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::{env, fs, process};
@@ -10,12 +10,14 @@ use std::{env, fs, process};
 fn usage(program: &str) {
     eprintln!("Usage: {program} [OPTIONS] [DIR]");
     eprintln!();
-    eprintln!("Rename files in DIR (default: current directory) by normalising");
-    eprintln!("accented characters, replacing spaces and special chars with `-`,");
-    eprintln!("and lowercasing everything.");
+    eprintln!("Rename files and/or directories in DIR (default: current directory)");
+    eprintln!("by normalising accented characters, replacing spaces and special");
+    eprintln!("chars with `-`, and lowercasing everything.");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  -n, --dry-run   Show what would be renamed without touching any file");
+    eprintln!("  -f              Rename files only (default: files + directories)");
+    eprintln!("  -d              Rename directories only");
+    eprintln!("  -n, --dry-run   Show what would be renamed without touching any entry");
     eprintln!("  -h, --help      Print this help message");
     eprintln!();
     eprintln!("Planned (not yet implemented):");
@@ -25,6 +27,7 @@ fn usage(program: &str) {
 struct Config {
     dir: PathBuf,
     dry_run: bool,
+    target: RenameTarget,
 }
 
 fn parse_args() -> Result<Config, String> {
@@ -33,6 +36,8 @@ fn parse_args() -> Result<Config, String> {
 
     let mut dry_run = false;
     let mut dir: Option<PathBuf> = None;
+    let mut files_only = false;
+    let mut dirs_only = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -43,6 +48,12 @@ fn parse_args() -> Result<Config, String> {
             }
             "-n" | "--dry-run" => {
                 dry_run = true;
+            }
+            "-f" => {
+                files_only = true;
+            }
+            "-d" => {
+                dirs_only = true;
             }
             "-r" => {
                 return Err("The -r (recursive) flag is not yet implemented.".to_owned());
@@ -60,6 +71,16 @@ fn parse_args() -> Result<Config, String> {
         i += 1;
     }
 
+    if files_only && dirs_only {
+        return Err("-f and -d are mutually exclusive.".to_owned());
+    }
+
+    let target = match (files_only, dirs_only) {
+        (true, false) => RenameTarget::FilesOnly,
+        (false, true) => RenameTarget::DirsOnly,
+        _ => RenameTarget::All,
+    };
+
     let dir =
         dir.unwrap_or_else(|| env::current_dir().expect("Cannot determine current directory"));
 
@@ -67,7 +88,11 @@ fn parse_args() -> Result<Config, String> {
         return Err(format!("'{}' is not a directory.", dir.display()));
     }
 
-    Ok(Config { dir, dry_run })
+    Ok(Config {
+        dir,
+        dry_run,
+        target,
+    })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -124,7 +149,7 @@ fn main() {
 
     println!("Directory: {}\n", config.dir.display());
 
-    let ops = match compute_renames(&config.dir) {
+    let ops = match compute_renames(&config.dir, config.target) {
         Ok(ops) => ops,
         Err(err) => {
             eprintln!("Error reading directory: {err}");
