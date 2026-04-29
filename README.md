@@ -7,9 +7,7 @@
 
 A small Rust CLI tool that renames files and directories to clean, ASCII-safe slugs.
 
-```
-"   01_ Une     chaîne de      CARACtères.pdf" → "01-une-chaine-de-caracteres.pdf"
-```
+![rename-simple demo](assets/rename-simple.png)
 
 ## What it does
 
@@ -97,7 +95,7 @@ Directory: /home/user/Documents
 Directory: /home/user/Documents/Notes
 
   Réunion'équipe.md               →  reunion-equipe.md
-  Café Info.txt                  →  cafe-info.txt
+  Café Info.txt                   →  cafe-info.txt
 
 5 entry/entries would be renamed, 0 error(s).
 ```
