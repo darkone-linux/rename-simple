@@ -23,7 +23,7 @@ fn usage(program: &str) {
 }
 
 struct Config {
-    dir:     PathBuf,
+    dir: PathBuf,
     dry_run: bool,
 }
 
@@ -45,9 +45,7 @@ fn parse_args() -> Result<Config, String> {
                 dry_run = true;
             }
             "-r" => {
-                return Err(
-                    "The -r (recursive) flag is not yet implemented.".to_owned()
-                );
+                return Err("The -r (recursive) flag is not yet implemented.".to_owned());
             }
             flag if flag.starts_with('-') => {
                 return Err(format!("Unknown flag: {flag}"));
@@ -62,9 +60,8 @@ fn parse_args() -> Result<Config, String> {
         i += 1;
     }
 
-    let dir = dir.unwrap_or_else(|| {
-        env::current_dir().expect("Cannot determine current directory")
-    });
+    let dir =
+        dir.unwrap_or_else(|| env::current_dir().expect("Cannot determine current directory"));
 
     if !dir.is_dir() {
         return Err(format!("'{}' is not a directory.", dir.display()));
@@ -113,7 +110,7 @@ fn filter_conflicts(ops: Vec<RenameOp>) -> Vec<RenameOp> {
 
 fn main() {
     let config = match parse_args() {
-        Ok(c)    => c,
+        Ok(c) => c,
         Err(msg) => {
             eprintln!("Error: {msg}");
             eprintln!("Run with --help for usage.");
@@ -128,7 +125,7 @@ fn main() {
     println!("Directory: {}\n", config.dir.display());
 
     let ops = match compute_renames(&config.dir) {
-        Ok(ops)  => ops,
+        Ok(ops) => ops,
         Err(err) => {
             eprintln!("Error reading directory: {err}");
             process::exit(1);
@@ -143,11 +140,11 @@ fn main() {
     let ops = filter_conflicts(ops);
 
     let mut renamed = 0usize;
-    let mut errors  = 0usize;
+    let mut errors = 0usize;
 
     for op in &ops {
         let from_name = op.from.file_name().unwrap().to_string_lossy();
-        let to_name   = op.to  .file_name().unwrap().to_string_lossy();
+        let to_name = op.to.file_name().unwrap().to_string_lossy();
 
         if config.dry_run {
             println!("  {} → {}", from_name, to_name);

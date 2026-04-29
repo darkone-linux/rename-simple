@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Character transliteration
@@ -16,19 +16,48 @@ pub fn transliterate_char(c: char) -> &'static str {
     // Fast path: plain ASCII
     if c.is_ascii_digit() {
         return match c {
-            '0' => "0", '1' => "1", '2' => "2", '3' => "3", '4' => "4",
-            '5' => "5", '6' => "6", '7' => "7", '8' => "8", '9' => "9",
-            _   => "-",
+            '0' => "0",
+            '1' => "1",
+            '2' => "2",
+            '3' => "3",
+            '4' => "4",
+            '5' => "5",
+            '6' => "6",
+            '7' => "7",
+            '8' => "8",
+            '9' => "9",
+            _ => "-",
         };
     }
     if c.is_ascii_alphabetic() {
         return match c.to_ascii_lowercase() {
-            'a' => "a", 'b' => "b", 'c' => "c", 'd' => "d", 'e' => "e",
-            'f' => "f", 'g' => "g", 'h' => "h", 'i' => "i", 'j' => "j",
-            'k' => "k", 'l' => "l", 'm' => "m", 'n' => "n", 'o' => "o",
-            'p' => "p", 'q' => "q", 'r' => "r", 's' => "s", 't' => "t",
-            'u' => "u", 'v' => "v", 'w' => "w", 'x' => "x", 'y' => "y",
-            'z' => "z", _ => "-",
+            'a' => "a",
+            'b' => "b",
+            'c' => "c",
+            'd' => "d",
+            'e' => "e",
+            'f' => "f",
+            'g' => "g",
+            'h' => "h",
+            'i' => "i",
+            'j' => "j",
+            'k' => "k",
+            'l' => "l",
+            'm' => "m",
+            'n' => "n",
+            'o' => "o",
+            'p' => "p",
+            'q' => "q",
+            'r' => "r",
+            's' => "s",
+            't' => "t",
+            'u' => "u",
+            'v' => "v",
+            'w' => "w",
+            'x' => "x",
+            'y' => "y",
+            'z' => "z",
+            _ => "-",
         };
     }
     if c == '_' {
@@ -38,38 +67,33 @@ pub fn transliterate_char(c: char) -> &'static str {
     // Extended Latin — both cases handled in a single arm
     match c {
         // A
-        'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' |
-        'à' | 'á' | 'â' | 'ã' | 'ä' | 'å'             => "a",
-        'Æ' | 'æ'                                     => "ae",
+        'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' | 'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' => "a",
+        'Æ' | 'æ' => "ae",
         // C
-        'Ç' | 'ç'                                     => "c",
+        'Ç' | 'ç' => "c",
         // D
-        'Ð' | 'ð'                                     => "d",
+        'Ð' | 'ð' => "d",
         // E
-        'È' | 'É' | 'Ê' | 'Ë' |
-        'è' | 'é' | 'ê' | 'ë'                         => "e",
+        'È' | 'É' | 'Ê' | 'Ë' | 'è' | 'é' | 'ê' | 'ë' => "e",
         // I
-        'Ì' | 'Í' | 'Î' | 'Ï' |
-        'ì' | 'í' | 'î' | 'ï'                         => "i",
+        'Ì' | 'Í' | 'Î' | 'Ï' | 'ì' | 'í' | 'î' | 'ï' => "i",
         // N
-        'Ñ' | 'ñ'                                     => "n",
+        'Ñ' | 'ñ' => "n",
         // O
-        'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' |
-        'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø'             => "o",
-        'Œ' | 'œ'                                     => "oe",
+        'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' | 'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' => "o",
+        'Œ' | 'œ' => "oe",
         // S
-        'ß'                                           => "ss",
+        'ß' => "ss",
         // T (Thorn)
-        'Þ' | 'þ'                                     => "th",
+        'Þ' | 'þ' => "th",
         // U
-        'Ù' | 'Ú' | 'Û' | 'Ü' |
-        'ù' | 'ú' | 'û' | 'ü'                         => "u",
+        'Ù' | 'Ú' | 'Û' | 'Ü' | 'ù' | 'ú' | 'û' | 'ü' => "u",
         // Y
-        'Ý' | 'Ÿ' | 'ý' | 'ÿ'                         => "y",
+        'Ý' | 'Ÿ' | 'ý' | 'ÿ' => "y",
         // Z
-        'Ź' | 'Ż' | 'Ž' | 'ź' | 'ż' | 'ž'             => "z",
+        'Ź' | 'Ż' | 'Ž' | 'ź' | 'ż' | 'ž' => "z",
         // Anything else is a separator
-        _                                             => "-",
+        _ => "-",
     }
 }
 
@@ -154,12 +178,7 @@ pub fn transform_stem(stem: &str) -> String {
 
 /// Known compound extensions that must be kept together.
 /// Stored and matched in lowercase — add new ones here as needed.
-const DOUBLE_EXTENSIONS: &[&str] = &[
-    "tar.gz",
-    "tar.bz2",
-    "tar.xz",
-    "tar.zst",
-];
+const DOUBLE_EXTENSIONS: &[&str] = &["tar.gz", "tar.bz2", "tar.xz", "tar.zst"];
 
 /// Extract a compound extension if the filename ends with one of the known
 /// double extensions (case-insensitive), and return `(stem, ".compound.ext")`.
@@ -219,7 +238,7 @@ pub fn transform_filename(filename: &str) -> String {
 #[derive(Debug, Clone)]
 pub struct RenameOp {
     pub from: PathBuf,
-    pub to:   PathBuf,
+    pub to: PathBuf,
 }
 
 /// Walk `dir` (non-recursively) and return the list of renames to perform.
@@ -232,7 +251,7 @@ pub fn compute_renames(dir: &Path) -> Result<Vec<RenameOp>, std::io::Error> {
 
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
-        let path  = entry.path();
+        let path = entry.path();
 
         if !path.is_file() {
             continue;
@@ -240,7 +259,7 @@ pub fn compute_renames(dir: &Path) -> Result<Vec<RenameOp>, std::io::Error> {
 
         let original = match path.file_name().and_then(|n| n.to_str()) {
             Some(name) => name.to_owned(),
-            None       => continue,
+            None => continue,
         };
 
         // Skip hidden files
@@ -256,7 +275,7 @@ pub fn compute_renames(dir: &Path) -> Result<Vec<RenameOp>, std::io::Error> {
 
         ops.push(RenameOp {
             from: path.clone(),
-            to:   dir.join(&renamed),
+            to: dir.join(&renamed),
         });
     }
 

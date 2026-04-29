@@ -11,8 +11,11 @@ mod transliterate_char_tests {
     #[test]
     fn ascii_lowercase_letters_are_preserved() {
         for c in 'a'..='z' {
-            assert_eq!(transliterate_char(c), c.to_string().as_str(),
-                "expected '{c}' to stay '{c}'");
+            assert_eq!(
+                transliterate_char(c),
+                c.to_string().as_str(),
+                "expected '{c}' to stay '{c}'"
+            );
         }
     }
 
@@ -26,8 +29,11 @@ mod transliterate_char_tests {
     #[test]
     fn digits_are_preserved() {
         for c in '0'..='9' {
-            assert_eq!(transliterate_char(c), c.to_string().as_str(),
-                "expected digit '{c}' to stay '{c}'");
+            assert_eq!(
+                transliterate_char(c),
+                c.to_string().as_str(),
+                "expected digit '{c}' to stay '{c}'"
+            );
         }
     }
 
@@ -146,7 +152,9 @@ mod transliterate_char_tests {
 
     #[test]
     fn punctuation_becomes_dash() {
-        for c in ['.', ',', ';', '!', '?', ':', '(', ')', '[', ']', '\'', '"', '/', '\\'] {
+        for c in [
+            '.', ',', ';', '!', '?', ':', '(', ')', '[', ']', '\'', '"', '/', '\\',
+        ] {
             assert_eq!(transliterate_char(c), "-", "failed for '{c}'");
         }
     }
@@ -335,18 +343,21 @@ mod transform_filename_tests {
     // — Extension handling ────────────────────────────────────────────────────
     #[test]
     fn extension_is_lowercased() {
-        assert_eq!(transform_filename("document.PDF"),   "document.pdf");
-        assert_eq!(transform_filename("image.JPEG"),     "image.jpeg");
+        assert_eq!(transform_filename("document.PDF"), "document.pdf");
+        assert_eq!(transform_filename("image.JPEG"), "image.jpeg");
     }
 
     #[test]
     fn double_extension_tar_gz_is_kept_together() {
-        assert_eq!(transform_filename("archive.TAR.GZ"),     "archive.tar.gz"); // known -> double ext
-        assert_eq!(transform_filename("archive.TOR.GZ"),     "archive-tor.gz"); // unknown -> simple ext
-        assert_eq!(transform_filename("Mon Archive.tar.gz"), "mon-archive.tar.gz");
-        assert_eq!(transform_filename("backup.TAR.BZ2"),     "backup.tar.bz2");
-        assert_eq!(transform_filename("backup.TAR.XZ"),      "backup.tar.xz");
-        assert_eq!(transform_filename("backup.TAR.ZST"),     "backup.tar.zst");
+        assert_eq!(transform_filename("archive.TAR.GZ"), "archive.tar.gz"); // known -> double ext
+        assert_eq!(transform_filename("archive.TOR.GZ"), "archive-tor.gz"); // unknown -> simple ext
+        assert_eq!(
+            transform_filename("Mon Archive.tar.gz"),
+            "mon-archive.tar.gz"
+        );
+        assert_eq!(transform_filename("backup.TAR.BZ2"), "backup.tar.bz2");
+        assert_eq!(transform_filename("backup.TAR.XZ"), "backup.tar.xz");
+        assert_eq!(transform_filename("backup.TAR.ZST"), "backup.tar.zst");
     }
 
     #[test]
@@ -357,44 +368,53 @@ mod transform_filename_tests {
 
     #[test]
     fn extension_preserved_on_clean_name() {
-        assert_eq!(transform_filename("notes.txt"),     "notes.txt");
-        assert_eq!(transform_filename("data.csv"),      "data.csv");
-        assert_eq!(transform_filename("report.docx"),   "report.docx");
+        assert_eq!(transform_filename("notes.txt"), "notes.txt");
+        assert_eq!(transform_filename("data.csv"), "data.csv");
+        assert_eq!(transform_filename("report.docx"), "report.docx");
     }
 
     // — Accented filenames ────────────────────────────────────────────────────
     #[test]
     fn accented_filename_with_extension() {
-        assert_eq!(transform_filename("Réunion d'équipe.docx"), "reunion-d-equipe.docx");
-        assert_eq!(transform_filename("procès-verbal.pdf"),     "proces-verbal.pdf");
-        assert_eq!(transform_filename("Données 2024.xlsx"),     "donnees-2024.xlsx");
+        assert_eq!(
+            transform_filename("Réunion d'équipe.docx"),
+            "reunion-d-equipe.docx"
+        );
+        assert_eq!(transform_filename("procès-verbal.pdf"), "proces-verbal.pdf");
+        assert_eq!(transform_filename("Données 2024.xlsx"), "donnees-2024.xlsx");
     }
 
     // — Separators and underscores in filenames ───────────────────────────────
     #[test]
     fn numbered_prefix_preserved() {
-        assert_eq!(transform_filename("01_introduction.md"),    "01_introduction.md");
-        assert_eq!(transform_filename("02_  Résumé.md"),        "02_resume.md");
+        assert_eq!(
+            transform_filename("01_introduction.md"),
+            "01_introduction.md"
+        );
+        assert_eq!(transform_filename("02_  Résumé.md"), "02_resume.md");
     }
 
     #[test]
     fn spaces_around_underscore_in_filename() {
-        assert_eq!(transform_filename("01_ Titre du chapitre.txt"), "01_titre-du-chapitre.txt");
+        assert_eq!(
+            transform_filename("01_ Titre du chapitre.txt"),
+            "01_titre-du-chapitre.txt"
+        );
     }
 
     // — Hidden files ──────────────────────────────────────────────────────────
     #[test]
     fn hidden_files_are_not_modified() {
-        assert_eq!(transform_filename(".gitignore"),     ".gitignore");
-        assert_eq!(transform_filename(".hidden file"),   ".hidden file");
-        assert_eq!(transform_filename(".DS_Store"),      ".DS_Store");
+        assert_eq!(transform_filename(".gitignore"), ".gitignore");
+        assert_eq!(transform_filename(".hidden file"), ".hidden file");
+        assert_eq!(transform_filename(".DS_Store"), ".DS_Store");
     }
 
     // — Edge cases ────────────────────────────────────────────────────────────
     #[test]
     fn empty_stem_after_transform_returns_unnamed() {
         assert_eq!(transform_filename("!!!(((---)))!!.txt"), "unnamed.txt");
-        assert_eq!(transform_filename("???.pdf"),            "unnamed.pdf");
+        assert_eq!(transform_filename("???.pdf"), "unnamed.pdf");
     }
 
     #[test]
@@ -404,7 +424,10 @@ mod transform_filename_tests {
 
     #[test]
     fn filename_with_numbers_and_caps() {
-        assert_eq!(transform_filename("IMG_2024_VACANCES ÉTÉ.jpg"), "img_2024_vacances-ete.jpg");
+        assert_eq!(
+            transform_filename("IMG_2024_VACANCES ÉTÉ.jpg"),
+            "img_2024_vacances-ete.jpg"
+        );
     }
 
     #[test]
