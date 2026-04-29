@@ -35,10 +35,9 @@ rename-simple [OPTIONS] [DIR]
 | `DIR` | Directory to process (default: current directory) |
 | `-f`, `--files` | Rename files only |
 | `-d`, `--dirs` | Rename directories only |
+| `-r`, `--recursive` | Process subdirectories recursively |
 | `-n`, `--dry-run` | Preview renames without touching any file |
 | `-h`, `--help` | Print help |
-
-> **Coming soon:** `-r` for recursive processing.
 
 ## Examples
 
@@ -78,6 +77,24 @@ $ rename-simple ~/Downloads
   Café Montreal.jpg               →  cafe-montreal.jpg
 
 3 file(s) renamed, 0 error(s).
+```
+
+### Recursive processing
+
+```bash
+$ rename-simple --recursive ~/Documents
+
+Directory: /home/user/Documents
+
+  Rapport 2024.pdf               →  rapport-2024.pdf
+  Notes/                         →  notes/
+
+Directory: /home/user/Documents/Notes
+
+  Réunion'équipe.md               →  reunion-equipe.md
+  Café Info.txt                  →  cafe-info.txt
+
+5 entry/entries would be renamed, 0 error(s).
 ```
 
 ## Running the tests

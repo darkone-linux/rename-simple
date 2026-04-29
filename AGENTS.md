@@ -6,6 +6,7 @@
 - **Language**: Rust
 - **Build**: `cargo build --release` → `target/release/rename-simple`
 - **Test**: `cargo test`
+- **Development**: Use `nix-shell` to load cargo, rust and project dependencies.
 
 ---
 
@@ -16,7 +17,9 @@ src/
 ├── lib.rs      # Core transformation logic (transliterate_char, transform_filename, compute_renames, etc.)
 ├── main.rs     # CLI (argument parsing, conflict detection, main loop)
 tests/
-└── transform_tests.rs  # Integration tests
+├── cli_tests.rs       # CLI integration tests
+├── recursive_tests.rs  # Recursive (-r) integration tests
+└── transform_tests.rs # Unit tests
 ```
 
 ---
@@ -27,6 +30,7 @@ tests/
 - Tests located in `tests/` directory
 - Hidden files (starting with `.`) are skipped
 - Compound extensions (`.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`) are preserved
+- Recursive processing (`-r`) is implemented
 
 ---
 
@@ -52,10 +56,8 @@ Options:
   -n, --dry-run   Show what would be renamed without touching any file
   -d, --dirs      Rename directory names only
   -f, --files     Rename file names only
-  -h, --help      Print this help message
-
-Planned (not yet implemented):
   -r, --recursive Process directories recursively
+  -h, --help      Print this help message
 ```
 
 ---
