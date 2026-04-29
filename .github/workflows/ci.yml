@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v6
+
+      - name: Run CI
+        run: |
+          nix-shell shell.nix --run "cargo fmt --all"
+          nix-shell shell.nix --run "cargo clippy --all-targets --all-features -- -D warnings"
+          nix-shell shell.nix --run "cargo test"
