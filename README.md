@@ -1,5 +1,10 @@
 # rename-simple
 
+[![CI](https://github.com/darkone-linux/rename-simple/actions/workflows/ci.yml/badge.svg)](https://github.com/darkone-linux/rename-simple/actions/workflows/ci.yml)
+[![Rustc](https://img.shields.io/badge/rustc-1.70%2B-blue)](https://rust-lang.org)
+[![Version](https://img.shields.io/crates/v/rename-simple)](https://crates.io/crates/rename-simple)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](./LICENSE)
+
 A small Rust CLI tool that renames files and directories to clean, ASCII-safe slugs.
 
 ```
