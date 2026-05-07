@@ -119,7 +119,7 @@ fn test_non_recursive_renames_root_only() {
     fs::write(dir.join("Sous-dossier/Fichier Test.txt"), "content").unwrap();
     fs::write(dir.join("Fichier Test.txt"), "content").unwrap();
 
-    let output = cmd().arg("-n").arg(dir).output().unwrap();
+    let output = cmd().arg("-n").arg("-v").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -137,7 +137,13 @@ fn test_recursive_handles_multiple_subdirs() {
     fs::write(dir.join("Dossier A/Fichier A.txt"), "content").unwrap();
     fs::write(dir.join("Dossier B/Fichier B.txt"), "content").unwrap();
 
-    let output = cmd().arg("-r").arg("-n").arg(dir).output().unwrap();
+    let output = cmd()
+        .arg("-r")
+        .arg("-n")
+        .arg("-v")
+        .arg(dir)
+        .output()
+        .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     assert!(output.status.success());

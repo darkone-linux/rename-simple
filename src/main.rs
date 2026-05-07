@@ -18,6 +18,7 @@ fn usage(program: &str) {
     eprintln!("  -f              Rename files only (default: files + directories)");
     eprintln!("  -d              Rename directories only");
     eprintln!("  -r, --recursive Process subdirectories recursively");
+    eprintln!("  -v, --verbose   Show details of what is being renamed");
     eprintln!("  -n, --dry-run   Show what would be renamed without touching any entry");
     eprintln!("  -h, --help      Print this help message");
 }
@@ -27,6 +28,7 @@ struct Config {
     dry_run: bool,
     recursive: bool,
     target: RenameTarget,
+    verbose: bool,
 }
 
 fn parse_args() -> Result<Config, String> {
@@ -35,6 +37,7 @@ fn parse_args() -> Result<Config, String> {
 
     let mut dry_run = false;
     let mut recursive = false;
+    let mut verbose = false;
     let mut files_only = false;
     let mut dirs_only = false;
     let mut dir: Option<PathBuf> = None;
@@ -48,6 +51,9 @@ fn parse_args() -> Result<Config, String> {
             }
             "-n" | "--dry-run" => {
                 dry_run = true;
+            }
+            "-v" | "--verbose" => {
+                verbose = true;
             }
             "-r" | "--recursive" => {
                 recursive = true;
@@ -93,6 +99,7 @@ fn parse_args() -> Result<Config, String> {
         dry_run,
         recursive,
         target,
+        verbose,
     })
 }
 
@@ -141,18 +148,22 @@ struct Counters {
 
 /// Apply a list of rename operations, printing each result.
 /// Updates `counters` in place.
-fn apply_ops(ops: &[RenameOp], dry_run: bool, counters: &mut Counters) {
+fn apply_ops(ops: &[RenameOp], dry_run: bool, verbose: bool, counters: &mut Counters) {
     for op in ops {
         let from_name = op.from.file_name().unwrap().to_string_lossy();
         let to_name = op.to.file_name().unwrap().to_string_lossy();
 
         if dry_run {
-            println!("  {} → {}", from_name, to_name);
+            if verbose {
+                println!("  {} → {}", from_name, to_name);
+            }
             counters.renamed += 1;
         } else {
             match fs::rename(&op.from, &op.to) {
                 Ok(()) => {
-                    println!("  {} → {}", from_name, to_name);
+                    if verbose {
+                        println!("  {} → {}", from_name, to_name);
+                    }
                     counters.renamed += 1;
                 }
                 Err(e) => {
@@ -211,7 +222,9 @@ fn effective_subdir_path(original: &Path, parent: &Path, dry_run: bool) -> PathB
 /// renames, and — when `config.recursive` is true — descends into every
 /// subdirectory using its post-rename path.
 fn process_dir(dir: &Path, config: &Config, counters: &mut Counters) {
-    println!("Directory: {}\n", dir.display());
+    if config.verbose {
+        println!("Directory: {}\n", dir.display());
+    }
 
     // Snapshot subdirs BEFORE any rename so we can resolve their new paths later.
     let subdirs = if config.recursive {
@@ -226,12 +239,16 @@ fn process_dir(dir: &Path, config: &Config, counters: &mut Counters) {
             eprintln!("  ✗ Cannot read directory: {e}");
         }
         Ok(ops) if ops.is_empty() => {
-            println!("  (nothing to rename)\n");
+            if config.verbose {
+                println!("  (nothing to rename)\n");
+            }
         }
         Ok(ops) => {
             let ops = filter_conflicts(ops);
-            apply_ops(&ops, config.dry_run, counters);
-            println!();
+            apply_ops(&ops, config.dry_run, config.verbose, counters);
+            if config.verbose {
+                println!();
+            }
         }
     }
 
@@ -260,7 +277,7 @@ fn main() {
         }
     };
 
-    if config.dry_run {
+    if config.dry_run && config.verbose {
         println!("Dry run – no files will be modified.\n");
     }
 
@@ -271,13 +288,15 @@ fn main() {
 
     process_dir(&config.dir, &config, &mut counters);
 
-    let label = if config.dry_run {
-        "would be renamed"
-    } else {
-        "renamed"
-    };
-    println!(
-        "{} entry/entries {label}, {} error(s).",
-        counters.renamed, counters.errors
-    );
+    if config.verbose {
+        let label = if config.dry_run {
+            "would be renamed"
+        } else {
+            "renamed"
+        };
+        println!(
+            "{} entry/entries {label}, {} error(s).",
+            counters.renamed, counters.errors
+        );
+    }
 }
