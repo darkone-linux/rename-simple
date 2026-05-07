@@ -1,0 +1,90 @@
+.TH RENAME-SIMPLE 1 "2026-05-07" "rename-simple 0.2.0" "User Commands"
+.SH NAME
+rename-simple \- clean filenames to lowercase, ASCII-safe slugs
+.SH SYNOPSIS
+.B rename-simple
+[OPTIONS] [\fIDIR\fR]
+.SH DESCRIPTION
+.B rename-simple
+renames files and/or directories in \fIDIR\fR (default: current directory)
+by normalising accented characters, replacing spaces and special characters
+with hyphens, and lowercasing everything.
+.PP
+The transformation pipeline is:
+.IP 1. 4
+Transliterate accented and non-ASCII characters to their ASCII equivalents
+(e.g. é -> e, ß -> ss, Æ -> ae).
+.IP 2. 4
+Replace all remaining special characters with a hyphen (\fB\-\fR).
+.IP 3. 4
+Collapse consecutive hyphens into a single hyphen.
+.IP 4. 4
+Clean underscore/hyphen boundaries (\fI_-\fR and \fI-_\fR become \fI_\fR).
+.IP 5. 4
+Collapse consecutive underscores.
+.IP 6. 4
+Strip leading and trailing hyphens and underscores.
+.PP
+Compound extensions (\fI.tar.gz\fR, \fI.tar.bz2\fR, \fI.tar.xz\fR,
+\fI.tar.zst\fR) are preserved. Hidden files (names starting with a dot) are
+never modified.
+.PP
+By default the program produces no output on success. Use
+\fB\-v\fR/\fB\-\-verbose\fR to display details.
+.SH OPTIONS
+.TP
+.B \-f
+Rename files only (default: files and directories).
+.TP
+.B \-d
+Rename directories only (default: files and directories).
+.TP
+.B \-r, \-\-recursive
+Process subdirectories recursively.
+.TP
+.B \-v, \-\-verbose
+Show details of each rename operation and a summary.
+.TP
+.B \-n, \-\-dry-run
+Show what would be renamed without actually renaming any entry.
+.TP
+.B \-h, \-\-help
+Print a help message and exit.
+.SH EXIT STATUS
+.TP
+0
+All entries were renamed successfully (or no entries needed renaming).
+.TP
+1
+An error occurred (invalid arguments, I/O error, etc.).
+.SH EXAMPLES
+.TP
+Rename files in the current directory
+rename-simple
+.TP
+Rename files in a specific directory with verbose output
+rename-simple \-v ~/Downloads
+.TP
+Preview what would be renamed without touching anything
+rename-simple \-n \-v
+.TP
+Recursively rename only files (skip directories)
+rename-simple \-f \-r
+.TP
+Rename directories only
+rename-simple \-d
+.SH AUTHOR
+Written by darkone-linux.
+.SH REPORTING BUGS
+.B GitHub:
+.UR https://github.com/darkone-linux/rename-simple
+https://github.com/darkone-linux/rename-simple
+.UE
+.SH COPYRIGHT
+Copyright \[co] 2026 darkone-linux.
+License MIT: <https://opensource.org/licenses/MIT>.
+.br
+This is free software: you are free to change and redistribute it.
+.SH SEE ALSO
+.BR mv (1),
+.BR rename (1)
