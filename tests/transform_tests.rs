@@ -624,4 +624,35 @@ mod transform_filename_tests {
         assert_eq!(transform_filename("hello---.txt"), "hello.txt");
         assert_eq!(transform_filename("hello___.txt"), "hello.txt");
     }
+
+    // — Multi-dot and compound-ext edge cases ────────────────────────────────
+    #[test]
+    fn multiple_dots_in_stem_become_dashes() {
+        assert_eq!(transform_filename("v1.2.3.txt"), "v1-2-3.txt");
+        assert_eq!(
+            transform_filename("backup.2024.01.31.tar.gz"),
+            "backup-2024-01-31.tar.gz"
+        );
+    }
+
+    #[test]
+    fn compound_ext_without_dot_prefix_treated_as_simple() {
+        // "tar.gz" with no preceding stem name doesn't match `.tar.gz` (no leading dot).
+        // It is parsed as stem="tar", ext=".gz".
+        assert_eq!(transform_filename("tar.gz"), "tar.gz");
+    }
+
+    #[test]
+    fn very_long_stem_is_preserved() {
+        let stem: String = "a".repeat(200);
+        let input = format!("{stem}.txt");
+        assert_eq!(transform_filename(&input), input);
+    }
+
+    #[test]
+    fn zero_width_space_becomes_dash() {
+        // U+200B (ZWSP) is not a combining mark and has no NFD decomposition,
+        // so it falls back to the dash separator.
+        assert_eq!(transform_filename("abc\u{200B}def.txt"), "abc-def.txt");
+    }
 }
