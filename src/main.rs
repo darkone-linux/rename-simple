@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use rename_files::{compute_renames, transform_filename, RenameOp, RenameTarget};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -10,9 +10,8 @@ use std::{env, fs, process};
 
 /// Command-line interface, parsed by `clap`.
 ///
-/// Mutual exclusion between `-f` and `-d` is enforced by `conflicts_with`,
-/// so clap rejects `rename-simple -f -d` at parse time with a message that
-/// mentions both flags.
+/// Mutual exclusion between `-f`, `-d`, and `-a` is enforced by
+/// `conflicts_with_all`, so clap rejects invalid combinations at parse time.
 #[derive(Parser, Debug)]
 #[command(
     name = "rename-simple",
@@ -21,18 +20,22 @@ use std::{env, fs, process};
              special chars to clean ASCII slugs",
     long_about = None,
 )]
-// Five independent flags is normal for a CLI; refactoring into a state
+// Six independent flags is normal for a CLI; refactoring into a state
 // enum would obscure the clap derive layout without simplifying the call
 // sites.
 #[allow(clippy::struct_excessive_bools)]
 struct Cli {
-    /// Rename files only (default: files + directories)
-    #[arg(short = 'f', conflicts_with = "dirs_only")]
+    /// Rename files only
+    #[arg(short = 'f', conflicts_with_all = ["dirs_only", "all"])]
     files_only: bool,
 
     /// Rename directories only
-    #[arg(short = 'd')]
+    #[arg(short = 'd', conflicts_with_all = ["files_only", "all"])]
     dirs_only: bool,
+
+    /// Rename both files and directories
+    #[arg(short = 'a', long, conflicts_with_all = ["files_only", "dirs_only"])]
+    all: bool,
 
     /// Process subdirectories recursively
     #[arg(short, long)]
@@ -62,10 +65,12 @@ struct Config {
 /// validation `clap` cannot express declaratively: that the target path is an
 /// existing directory.
 fn build_config(cli: Cli) -> Result<Config, String> {
-    let target = match (cli.files_only, cli.dirs_only) {
-        (true, false) => RenameTarget::FilesOnly,
-        (false, true) => RenameTarget::DirsOnly,
-        _ => RenameTarget::All,
+    let target = if cli.files_only {
+        RenameTarget::FilesOnly
+    } else if cli.dirs_only {
+        RenameTarget::DirsOnly
+    } else {
+        RenameTarget::All
     };
 
     let dir = cli.dir.map_or_else(
@@ -251,9 +256,17 @@ fn process_dir(dir: &Path, config: &Config, counters: &mut Counters) {
 
 fn main() {
     // `Cli::parse()` exits the process on parse errors and on `--help` /
-    // `--version`, so anything reaching `build_config` already has a
+    // `--version`, so anything reaching the next check already has a
     // syntactically valid command line.
-    let config = match build_config(Cli::parse()) {
+    let cli = Cli::parse();
+
+    // Without a target-mode flag (-f, -d, or -a), show help just like -h.
+    if !cli.files_only && !cli.dirs_only && !cli.all {
+        Cli::command().print_help().unwrap_or(());
+        process::exit(0);
+    }
+
+    let config = match build_config(cli) {
         Ok(c) => c,
         Err(msg) => {
             eprintln!("Error: {msg}");

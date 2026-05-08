@@ -6,14 +6,14 @@ fn cmd() -> Command {
 }
 
 #[test]
-fn test_files_renamed_by_default() {
+fn test_all_flag_renames_files() {
     let temp_dir = tempfile::tempdir().unwrap();
     let dir = temp_dir.path();
 
     fs::write(dir.join("Fichier Test.txt"), "content").unwrap();
     fs::write(dir.join("Café.md"), "content").unwrap();
 
-    let output = cmd().arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("fichier-test.txt").exists());
@@ -21,14 +21,14 @@ fn test_files_renamed_by_default() {
 }
 
 #[test]
-fn test_dirs_renamed_by_default() {
+fn test_all_flag_renames_dirs() {
     let temp_dir = tempfile::tempdir().unwrap();
     let dir = temp_dir.path();
 
     fs::create_dir(dir.join("Répertoire Test")).unwrap();
     fs::create_dir(dir.join("Café")).unwrap();
 
-    let output = cmd().arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("repertoire-test").exists());
@@ -73,7 +73,7 @@ fn test_dry_run_no_actual_rename() {
     fs::write(dir.join("Fichier.txt"), "content").unwrap();
     let original_content = fs::read(dir.join("Fichier.txt")).unwrap();
 
-    let output = cmd().arg("-n").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-n").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("Fichier.txt").exists());
@@ -89,7 +89,7 @@ fn test_hidden_files_skipped() {
     fs::write(dir.join(".hidden"), "content").unwrap();
     fs::write(dir.join("visible.txt"), "content").unwrap();
 
-    let output = cmd().arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join(".hidden").exists());
@@ -104,7 +104,7 @@ fn test_conflict_warning() {
     fs::write(dir.join("café.txt"), "content1").unwrap();
     fs::write(dir.join("CAFÉ.TXT"), "content2").unwrap();
 
-    let output = cmd().arg("-n").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-n").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -121,7 +121,7 @@ fn test_existing_destination_skipped() {
     fs::write(dir.join("café.txt"), "content1").unwrap();
     fs::write(dir.join("cafe.txt"), "content2").unwrap();
 
-    let output = cmd().arg("-n").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-n").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -151,7 +151,7 @@ fn test_no_extension_file_renamed() {
 
     fs::write(dir.join("Mon Fichier"), "content").unwrap();
 
-    let output = cmd().arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("mon-fichier").exists());
@@ -164,7 +164,7 @@ fn test_compound_extension_preserved() {
 
     fs::write(dir.join("archive.tar.gz"), "content").unwrap();
 
-    let output = cmd().arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("archive.tar.gz").exists());
@@ -177,7 +177,7 @@ fn test_numbers_preserved() {
 
     fs::write(dir.join("File 2024.txt"), "content").unwrap();
 
-    let output = cmd().arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("file-2024.txt").exists());
@@ -194,7 +194,7 @@ fn test_quiet_mode_produces_no_stdout() {
 
     fs::write(dir.join("Fichier Test.txt"), "content").unwrap();
 
-    let output = cmd().arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(
@@ -213,7 +213,7 @@ fn test_quiet_mode_still_reports_conflicts_on_stderr() {
     fs::write(dir.join("café.txt"), "1").unwrap();
     fs::write(dir.join("CAFÉ.TXT"), "2").unwrap();
 
-    let output = cmd().arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(output.stdout.is_empty());
@@ -225,7 +225,7 @@ fn test_quiet_mode_still_reports_conflicts_on_stderr() {
 fn test_empty_directory_produces_no_output() {
     let temp_dir = tempfile::tempdir().unwrap();
 
-    let output = cmd().arg(temp_dir.path()).output().unwrap();
+    let output = cmd().arg("-a").arg(temp_dir.path()).output().unwrap();
 
     assert!(output.status.success());
     assert!(output.stdout.is_empty());
@@ -238,7 +238,11 @@ fn test_empty_directory_produces_no_output() {
 
 #[test]
 fn test_nonexistent_directory_is_an_error() {
-    let output = cmd().arg("/this/path/does/not/exist/xyz").output().unwrap();
+    let output = cmd()
+        .arg("-a")
+        .arg("/this/path/does/not/exist/xyz")
+        .output()
+        .unwrap();
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -254,9 +258,53 @@ fn test_file_path_as_dir_argument_is_an_error() {
     let file_path = temp_dir.path().join("regular.txt");
     fs::write(&file_path, "x").unwrap();
 
-    let output = cmd().arg(&file_path).output().unwrap();
+    let output = cmd().arg("-a").arg(&file_path).output().unwrap();
 
     assert!(!output.status.success());
+}
+
+#[test]
+fn test_no_target_flag_shows_help() {
+    let output = cmd().output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Usage:"));
+}
+
+#[test]
+fn test_version_flag() {
+    let output = cmd().arg("--version").output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("rename-simple"));
+}
+
+#[test]
+fn test_a_and_f_together_are_rejected() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let output = cmd()
+        .arg("-a")
+        .arg("-f")
+        .arg(temp_dir.path())
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("-a") && stderr.contains("-f"));
+}
+
+#[test]
+fn test_a_and_d_together_are_rejected() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let output = cmd()
+        .arg("-a")
+        .arg("-d")
+        .arg(temp_dir.path())
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("-a") && stderr.contains("-d"));
 }
 
 #[test]
@@ -321,7 +369,7 @@ fn test_trailing_slash_argument_works() {
     fs::write(dir.join("Mon Fichier.txt"), "x").unwrap();
     let dir_with_slash = format!("{}/", dir.display());
 
-    let output = cmd().arg(&dir_with_slash).output().unwrap();
+    let output = cmd().arg("-a").arg(&dir_with_slash).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("mon-fichier.txt").exists());
@@ -338,6 +386,7 @@ fn test_flag_order_does_not_matter() {
 
     let td1 = make_dir();
     let out1 = cmd()
+        .arg("-a")
         .arg("-r")
         .arg("-n")
         .arg("-v")
@@ -350,6 +399,7 @@ fn test_flag_order_does_not_matter() {
         .arg("-v")
         .arg("-n")
         .arg("-r")
+        .arg("-a")
         .arg(td2.path())
         .output()
         .unwrap();
@@ -374,7 +424,7 @@ fn test_existing_destination_keeps_source_intact() {
     fs::write(dir.join("café.txt"), "source").unwrap();
     fs::write(dir.join("cafe.txt"), "destination").unwrap();
 
-    let output = cmd().arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("café.txt").exists(), "source must not be deleted");
@@ -395,7 +445,7 @@ fn test_three_way_conflict_all_skipped() {
     fs::write(dir.join("café.txt"), "2").unwrap();
     fs::write(dir.join("CAFE.txt"), "3").unwrap();
 
-    let output = cmd().arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     // None of the three should have been collapsed into a single cafe.txt

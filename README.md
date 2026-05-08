@@ -33,71 +33,80 @@ cargo install --path .
 rename-simple [OPTIONS] [DIR]
 ```
 
+You must specify one of `-f`, `-d`, or `-a` to select what to rename.
+Running `rename-simple` without any option prints this help.
+
 | Option | Description |
 |---|---|
 | `DIR` | Directory to process (default: current directory) |
-| `-f`, `--files` | Rename files only |
-| `-d`, `--dirs` | Rename directories only |
+| `-f` | Rename files only |
+| `-d` | Rename directories only |
+| `-a`, `--all` | Rename both files and directories |
 | `-r`, `--recursive` | Process subdirectories recursively |
 | `-n`, `--dry-run` | Preview renames without touching any file |
+| `-v`, `--verbose` | Show details of each rename |
 | `-h`, `--help` | Print help |
+| `-V`, `--version` | Print version |
 
 ## Examples
 
-### Basic usage
+### Preview all renames (dry-run)
 
 ```bash
-$ rename-simple --dry-run ~/Downloads
+$ rename-simple -a --dry-run ~/Downloads
+```
 
-Directory: /home/user/Downloads
-
+```
   01_ Introduction au Projet.PDF  →  01-introduction-au-projet.pdf
   Réunion d'équipe (2024).docx    →  reunion-d-equipe-2024.docx
   backup.TAR.GZ                   →  backup.tar.gz
   Café Montréal.jpg               →  cafe-montreal.jpg
-
-4 file(s) would be renamed.
 ```
 
-### Rename only directories
+### Rename files only
 
 ```bash
-$ rename-simple --dirs ~/Projects
-
-  Mes Documents/           →  mes-documents/
-  workspace/               →  workspace/
-
-2 directory(ies) would be renamed.
+$ rename-simple -f ~/Downloads
 ```
 
-### Actual rename (without dry-run)
+Directories are left untouched; only files are renamed.
+
+### Rename directories only
 
 ```bash
-$ rename-simple ~/Downloads
+$ rename-simple -d ~/Projects
+```
 
-  01_ Introduction au Projet.PDF  →  01-introduction-au-projet.pdf
-  Réunion d'équipe (2024).docx    →  reunion-d-equipe-2024.docx
-  Café Montreal.jpg               →  cafe-montreal.jpg
+Files are left untouched; only directories are renamed.
 
-3 file(s) renamed, 0 error(s).
+### Rename everything
+
+```bash
+$ rename-simple -a ~/Downloads
 ```
 
 ### Recursive processing
 
 ```bash
-$ rename-simple --recursive ~/Documents
+$ rename-simple -a --recursive ~/Documents
+```
 
-Directory: /home/user/Documents
+Renames files and directories at every level of the tree.
 
-  Rapport 2024.pdf               →  rapport-2024.pdf
-  Notes/                         →  notes/
+### Verbose output
 
-Directory: /home/user/Documents/Notes
+```bash
+$ rename-simple -a -v ~/Downloads
+```
 
-  Réunion'équipe.md               →  reunion-equipe.md
-  Café Info.txt                   →  cafe-info.txt
+```
+Directory: /home/user/Downloads
 
-5 entry/entries would be renamed, 0 error(s).
+  01_ Introduction au Projet.PDF  →  01-introduction-au-projet.pdf
+  Réunion d'équipe (2024).docx    →  reunion-d-equipe-2024.docx
+  Café Montreal.jpg               →  cafe-montreal.jpg
+
+3 entry/entries renamed, 0 error(s).
 ```
 
 ## Running the tests

@@ -17,7 +17,7 @@ fn test_recursive_processes_nested_files() {
     fs::create_dir(dir.join("Sous-dossier")).unwrap();
     fs::write(dir.join("Sous-dossier/Fichier Test.txt"), "content").unwrap();
 
-    let output = cmd().arg("-r").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("sous-dossier/fichier-test.txt").exists());
@@ -35,7 +35,7 @@ fn test_recursive_processes_deeply_nested_files() {
     )
     .unwrap();
 
-    let output = cmd().arg("-r").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir
@@ -51,7 +51,7 @@ fn test_recursive_renames_nested_directories() {
     fs::create_dir_all(dir.join("Sous-dossier/Sous-sous-dossier")).unwrap();
     fs::write(dir.join("test.txt"), "content").unwrap();
 
-    let output = cmd().arg("-r").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("sous-dossier/sous-sous-dossier").exists());
@@ -66,7 +66,13 @@ fn test_recursive_with_dry_run_no_actual_rename() {
     fs::write(dir.join("Sous-dossier/Fichier.txt"), "content").unwrap();
     let original_content = fs::read(dir.join("Sous-dossier/Fichier.txt")).unwrap();
 
-    let output = cmd().arg("-r").arg("-n").arg(dir).output().unwrap();
+    let output = cmd()
+        .arg("-a")
+        .arg("-r")
+        .arg("-n")
+        .arg(dir)
+        .output()
+        .unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("Sous-dossier/Fichier.txt").exists());
@@ -119,7 +125,13 @@ fn test_non_recursive_renames_root_only() {
     fs::write(dir.join("Sous-dossier/Fichier Test.txt"), "content").unwrap();
     fs::write(dir.join("Fichier Test.txt"), "content").unwrap();
 
-    let output = cmd().arg("-n").arg("-v").arg(dir).output().unwrap();
+    let output = cmd()
+        .arg("-a")
+        .arg("-n")
+        .arg("-v")
+        .arg(dir)
+        .output()
+        .unwrap();
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -138,6 +150,7 @@ fn test_recursive_handles_multiple_subdirs() {
     fs::write(dir.join("Dossier B/Fichier B.txt"), "content").unwrap();
 
     let output = cmd()
+        .arg("-a")
         .arg("-r")
         .arg("-n")
         .arg("-v")
@@ -161,7 +174,7 @@ fn test_recursive_with_hidden_subdirs_skipped() {
     fs::create_dir(dir.join(".hidden")).unwrap();
     fs::write(dir.join("visible.txt"), "content").unwrap();
 
-    let output = cmd().arg("-r").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join(".hidden").exists());
