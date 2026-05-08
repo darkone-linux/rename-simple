@@ -109,6 +109,22 @@ Directory: /home/user/Downloads
 3 entry/entries renamed, 0 error(s).
 ```
 
+## Tips
+
+If you use `-a` most of the time, a shell alias saves a few keystrokes:
+
+```bash
+alias rsa='rename-simple -a'
+```
+
+Add this line to your `~/.bashrc` or `~/.zshrc`, then:
+
+```bash
+rsa ~/Downloads          # rename everything
+rsa -r ~/Documents       # rename everything, recursively
+rsa -n ~/Downloads       # dry-run preview
+```
+
 ## Running the tests
 
 ```bash
