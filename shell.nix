@@ -4,13 +4,15 @@
 
 pkgs.mkShell {
   buildInputs = with pkgs; [
-    rustc
     cargo
     cargo-audit
-    rustfmt
     clippy
-    rust-analyzer
+    gh
+    just
     pkg-config
+    rust-analyzer
+    rustc
+    rustfmt
   ];
 
   shellHook = ''
