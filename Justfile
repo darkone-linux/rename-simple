@@ -67,6 +67,61 @@ _check_is_clean:
         exit 1; \
     fi
 
+# Bump the version number in Cargo.toml (patch | minor | major)
+bump level="patch":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    current=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)
+    IFS='.' read -r major minor patch <<< "$current"
+    case "{{ level }}" in
+        major) major=$((major + 1)); minor=0; patch=0 ;;
+        minor) minor=$((minor + 1)); patch=0 ;;
+        patch) patch=$((patch + 1)) ;;
+        *) echo "Usage: just bump [patch|minor|major]" >&2; exit 1 ;;
+    esac
+    new="${major}.${minor}.${patch}"
+    sed -i "s/^version = \"${current}\"/version = \"${new}\"/" Cargo.toml
+    cargo check -q
+    echo "Version bumped: ${current} → ${new}"
+    echo "Next step: update CHANGELOG.md, then run: just release"
+
+# Full release: test → commit → tag → push → GitHub Release → cargo publish
+release:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    v=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)
+    tag="v${v}"
+
+    # Guard: tag must not already exist
+    if git rev-parse "$tag" >/dev/null 2>&1; then
+        echo "Error: tag $tag already exists." >&2; exit 1
+    fi
+
+    # Guard: CHANGELOG.md must have an entry for this version
+    if ! grep -q "## \[${v}\]" CHANGELOG.md; then
+        echo "Error: CHANGELOG.md has no entry for [${v}]. Update it first." >&2; exit 1
+    fi
+
+    # Full quality gate
+    just test
+
+    # Commit Cargo.toml, Cargo.lock and CHANGELOG.md if anything is pending
+    git add Cargo.toml Cargo.lock CHANGELOG.md
+    git diff --cached --quiet || git commit -m "chore: release ${tag}"
+
+    # Annotated tag + push
+    git tag -a "$tag" -m "Release ${tag}"
+    git push origin main --follow-tags
+
+    # GitHub Release — notes extracted from CHANGELOG.md
+    notes=$(awk "/^## \[${v}\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
+    gh release create "$tag" --title "$tag" --notes "$notes"
+
+    # Publish to crates.io
+    cargo publish
+
+    echo "Released ${tag} — crates.io + GitHub ✓"
+
 # Build package for crates.io
 package: _check_is_clean
     cargo package
