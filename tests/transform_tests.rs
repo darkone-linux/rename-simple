@@ -144,6 +144,111 @@ mod transliterate_char_tests {
         }
     }
 
+    // — Latin Extended-A (covered automatically via NFD decomposition) ────────
+    #[test]
+    fn latin_extended_a_macron_breve_ogonek_caron() {
+        // Macron, breve, ogonek, caron — all decompose to base + combining mark
+        for c in ['Ā', 'Ă', 'Ą', 'ā', 'ă', 'ą'] {
+            assert_eq!(transliterate_char(c), "a", "failed for '{c}'");
+        }
+        for c in ['Ē', 'Ĕ', 'Ė', 'Ę', 'Ě', 'ē', 'ĕ', 'ė', 'ę', 'ě'] {
+            assert_eq!(transliterate_char(c), "e", "failed for '{c}'");
+        }
+        for c in ['Č', 'Ć', 'Ċ', 'Ĉ', 'č', 'ć', 'ċ', 'ĉ'] {
+            assert_eq!(transliterate_char(c), "c", "failed for '{c}'");
+        }
+        for c in ['Š', 'Ś', 'Ŝ', 'Ş', 'š', 'ś', 'ŝ', 'ş'] {
+            assert_eq!(transliterate_char(c), "s", "failed for '{c}'");
+        }
+        for c in ['Ř', 'Ŕ', 'Ŗ', 'ř', 'ŕ', 'ŗ'] {
+            assert_eq!(transliterate_char(c), "r", "failed for '{c}'");
+        }
+    }
+
+    // — Latin Extended-A non-decomposable (covered via special_latin map) ─────
+    #[test]
+    fn latin_extended_l_with_stroke() {
+        assert_eq!(transliterate_char('Ł'), "l");
+        assert_eq!(transliterate_char('ł'), "l");
+    }
+
+    #[test]
+    fn latin_extended_d_with_stroke() {
+        // Croatian / Vietnamese
+        assert_eq!(transliterate_char('Đ'), "d");
+        assert_eq!(transliterate_char('đ'), "d");
+    }
+
+    #[test]
+    fn latin_extended_h_with_stroke() {
+        // Maltese
+        assert_eq!(transliterate_char('Ħ'), "h");
+        assert_eq!(transliterate_char('ħ'), "h");
+    }
+
+    #[test]
+    fn latin_extended_t_with_stroke() {
+        assert_eq!(transliterate_char('Ŧ'), "t");
+        assert_eq!(transliterate_char('ŧ'), "t");
+    }
+
+    #[test]
+    fn latin_extended_ij_ligature() {
+        // Dutch IJ
+        assert_eq!(transliterate_char('Ĳ'), "ij");
+        assert_eq!(transliterate_char('ĳ'), "ij");
+    }
+
+    #[test]
+    fn turkish_dotted_and_dotless_i() {
+        // I with dot above (capital): NFD → I + combining dot above → "i"
+        assert_eq!(transliterate_char('İ'), "i");
+        // Dotless small i: non-decomposable, handled by special_latin
+        assert_eq!(transliterate_char('ı'), "i");
+    }
+
+    #[test]
+    fn romanian_letters_with_comma_below() {
+        // Modern Romanian uses comma-below (U+0218..U+021B), older fonts
+        // sometimes use cedilla (Ş Ţ); both must transliterate identically.
+        assert_eq!(transliterate_char('Ș'), "s");
+        assert_eq!(transliterate_char('ș'), "s");
+        assert_eq!(transliterate_char('Ț'), "t");
+        assert_eq!(transliterate_char('ț'), "t");
+        assert_eq!(transliterate_char('Ş'), "s");
+        assert_eq!(transliterate_char('ş'), "s");
+        assert_eq!(transliterate_char('Ţ'), "t");
+        assert_eq!(transliterate_char('ţ'), "t");
+    }
+
+    // — Combining marks are dropped ──────────────────────────────────────────
+    #[test]
+    fn combining_marks_are_dropped() {
+        // Combining acute, grave, circumflex, tilde, diaeresis
+        for c in ['\u{0301}', '\u{0300}', '\u{0302}', '\u{0303}', '\u{0308}'] {
+            assert_eq!(transliterate_char(c), "", "failed for U+{:04X}", c as u32);
+        }
+        // Combining cedilla, ogonek, caron, macron, breve
+        for c in ['\u{0327}', '\u{0328}', '\u{030C}', '\u{0304}', '\u{0306}'] {
+            assert_eq!(transliterate_char(c), "", "failed for U+{:04X}", c as u32);
+        }
+    }
+
+    // — Non-Latin scripts fall back to dash ──────────────────────────────────
+    #[test]
+    fn cjk_becomes_dash() {
+        for c in ['你', '好', '中', '日', '本', '한', '글'] {
+            assert_eq!(transliterate_char(c), "-", "failed for '{c}'");
+        }
+    }
+
+    #[test]
+    fn emoji_becomes_dash() {
+        for c in ['🦀', '📦', '✓', '★'] {
+            assert_eq!(transliterate_char(c), "-", "failed for '{c}'");
+        }
+    }
+
     // — Separators ────────────────────────────────────────────────────────────
     #[test]
     fn space_becomes_dash() {
@@ -320,6 +425,89 @@ mod transform_stem_tests {
         assert_eq!(transform_stem("æther"), "aether");
         assert_eq!(transform_stem("Œuvre"), "oeuvre");
         assert_eq!(transform_stem("straße"), "strasse");
+    }
+
+    // — Latin-Extended scripts (whole-word integration tests) ────────────────
+    #[test]
+    fn polish_words() {
+        assert_eq!(transform_stem("Łódź"), "lodz");
+        assert_eq!(transform_stem("Żółw"), "zolw");
+        assert_eq!(transform_stem("Pięć Złotych"), "piec-zlotych");
+    }
+
+    #[test]
+    fn czech_words() {
+        assert_eq!(transform_stem("Čeština"), "cestina");
+        assert_eq!(transform_stem("Příliš žluťoučký"), "prilis-zlutoucky");
+    }
+
+    #[test]
+    fn croatian_words() {
+        assert_eq!(transform_stem("Đak"), "dak");
+        assert_eq!(transform_stem("Šljiva čokolada"), "sljiva-cokolada");
+    }
+
+    #[test]
+    fn romanian_words() {
+        // Both comma-below (modern) and cedilla (legacy) Ş/Ţ
+        assert_eq!(transform_stem("Țuică"), "tuica");
+        assert_eq!(transform_stem("România"), "romania");
+        assert_eq!(transform_stem("Ţuică"), "tuica");
+    }
+
+    #[test]
+    fn turkish_words() {
+        assert_eq!(transform_stem("İstanbul"), "istanbul");
+        assert_eq!(transform_stem("ışık"), "isik");
+        assert_eq!(transform_stem("Türkçe"), "turkce");
+    }
+
+    #[test]
+    fn vietnamese_d_with_stroke() {
+        assert_eq!(transform_stem("Đà Nẵng"), "da-nang");
+    }
+
+    #[test]
+    fn dutch_ij_ligature_in_word() {
+        assert_eq!(transform_stem("Ĳsselmeer"), "ijsselmeer");
+    }
+
+    #[test]
+    fn icelandic_eth_and_thorn() {
+        assert_eq!(transform_stem("Þjóðverji"), "thjodverji");
+    }
+
+    // — NFD-decomposed input (idempotence) ───────────────────────────────────
+    #[test]
+    fn nfd_decomposed_input_is_handled() {
+        // "café" written as 'c','a','f','e' + combining acute
+        let nfd = "cafe\u{0301}";
+        assert_eq!(transform_stem(nfd), "cafe");
+        // NFC (precomposed) and NFD (decomposed) inputs must collapse to the
+        // same slug — this is the property that makes filenames stable across
+        // filesystems (HFS+/APFS often store names in NFD, ext4 in NFC).
+        assert_eq!(transform_stem("café"), transform_stem(nfd));
+    }
+
+    #[test]
+    fn nfd_decomposed_polish_input() {
+        // "Łódź" precomposed vs Ł + o + combining acute + d + z + combining acute
+        let nfd = "Ło\u{0301}dz\u{0301}";
+        assert_eq!(transform_stem(nfd), "lodz");
+        assert_eq!(transform_stem("Łódź"), transform_stem(nfd));
+    }
+
+    // — Unsupported scripts fall back to dashes ──────────────────────────────
+    #[test]
+    fn cjk_words_collapse_to_empty() {
+        // Each CJK char becomes "-", consecutive collapse, trim → ""
+        assert_eq!(transform_stem("你好"), "");
+        assert_eq!(transform_stem("中文"), "");
+    }
+
+    #[test]
+    fn mixed_latin_and_cjk_keeps_latin() {
+        assert_eq!(transform_stem("hello 你好 world"), "hello-world");
     }
 }
 

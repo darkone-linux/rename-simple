@@ -1,101 +1,88 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use unicode_normalization::char::is_combining_mark;
+use unicode_normalization::UnicodeNormalization;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Character transliteration
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Lowercase ASCII letters and digits as static `&str` slices.
+/// Indexed by `(0..=9, a..=z)` for table-lookup transliteration.
+const ASCII_LOWER_TABLE: [&str; 36] = [
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f", "g", "h", "i",
+    "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+];
+
+/// Map an ASCII alphanumeric character to its lowercase static slice.
+/// Returns `"-"` if `c` is not ASCII alphanumeric (defensive default).
+fn ascii_alnum_to_lower(c: char) -> &'static str {
+    let lower = c.to_ascii_lowercase();
+    if lower.is_ascii_digit() {
+        ASCII_LOWER_TABLE[(lower as u8 - b'0') as usize]
+    } else if lower.is_ascii_lowercase() {
+        ASCII_LOWER_TABLE[(lower as u8 - b'a' + 10) as usize]
+    } else {
+        "-"
+    }
+}
+
+/// Non-decomposable Latin letters that need an explicit ASCII expansion.
+///
+/// Unicode NFD does not break these into base + combining marks (they have no
+/// canonical decomposition), so they would otherwise fall through to `"-"`.
+fn special_latin(c: char) -> Option<&'static str> {
+    match c {
+        'Æ' | 'æ' => Some("ae"),
+        'Œ' | 'œ' => Some("oe"),
+        'ß' => Some("ss"),
+        'Þ' | 'þ' => Some("th"),
+        'Ø' | 'ø' => Some("o"),
+        'Ł' | 'ł' => Some("l"),
+        'Đ' | 'đ' | 'Ð' | 'ð' => Some("d"),
+        'Ħ' | 'ħ' => Some("h"),
+        'Ŧ' | 'ŧ' => Some("t"),
+        'Ĳ' | 'ĳ' => Some("ij"),
+        'ı' => Some("i"),
+        _ => None,
+    }
+}
+
 /// Transliterate a single Unicode character to its ASCII equivalent(s).
 ///
-/// - ASCII alphanumerics are lowercased and returned as-is.
-/// - `_` is preserved.
-/// - Accented/special letters are mapped to their base ASCII form.
-/// - Everything else (spaces, punctuation, unknown chars…) returns `"-"`,
-///   which will act as a separator marker in the pipeline.
+/// Pipeline:
+/// 1. Combining marks (e.g. U+0301 acute) are dropped (`""`).
+/// 2. ASCII alphanumerics are lowercased.
+/// 3. `_` is preserved.
+/// 4. A small special map covers non-decomposable Latin letters
+///    (`Æ`, `Œ`, `ß`, `Þ`, `Ø`, `Ł`, `Đ`/`Ð`, `Ħ`, `Ŧ`, `Ĳ`, `ı`).
+/// 5. Otherwise the char is NFD-decomposed; if the base is an ASCII letter,
+///    its lowercase form is returned. This covers the entire Latin Extended-A
+///    block (Polish, Czech, Romanian, Turkish dotted/dotless I, etc.).
+/// 6. Everything else (spaces, punctuation, CJK, emoji…) returns `"-"`.
 #[must_use]
 pub fn transliterate_char(c: char) -> &'static str {
-    // Fast path: plain ASCII
-    if c.is_ascii_digit() {
-        return match c {
-            '0' => "0",
-            '1' => "1",
-            '2' => "2",
-            '3' => "3",
-            '4' => "4",
-            '5' => "5",
-            '6' => "6",
-            '7' => "7",
-            '8' => "8",
-            '9' => "9",
-            _ => "-",
-        };
+    if is_combining_mark(c) {
+        return "";
     }
-    if c.is_ascii_alphabetic() {
-        return match c.to_ascii_lowercase() {
-            'a' => "a",
-            'b' => "b",
-            'c' => "c",
-            'd' => "d",
-            'e' => "e",
-            'f' => "f",
-            'g' => "g",
-            'h' => "h",
-            'i' => "i",
-            'j' => "j",
-            'k' => "k",
-            'l' => "l",
-            'm' => "m",
-            'n' => "n",
-            'o' => "o",
-            'p' => "p",
-            'q' => "q",
-            'r' => "r",
-            's' => "s",
-            't' => "t",
-            'u' => "u",
-            'v' => "v",
-            'w' => "w",
-            'x' => "x",
-            'y' => "y",
-            'z' => "z",
-            _ => "-",
-        };
+    if c.is_ascii_alphanumeric() {
+        return ascii_alnum_to_lower(c);
     }
     if c == '_' {
         return "_";
     }
-
-    // Extended Latin — both cases handled in a single arm
-    match c {
-        // A
-        'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' | 'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' => "a",
-        'Æ' | 'æ' => "ae",
-        // C
-        'Ç' | 'ç' => "c",
-        // D
-        'Ð' | 'ð' => "d",
-        // E
-        'È' | 'É' | 'Ê' | 'Ë' | 'è' | 'é' | 'ê' | 'ë' => "e",
-        // I
-        'Ì' | 'Í' | 'Î' | 'Ï' | 'ì' | 'í' | 'î' | 'ï' => "i",
-        // N
-        'Ñ' | 'ñ' => "n",
-        // O
-        'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' | 'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' => "o",
-        'Œ' | 'œ' => "oe",
-        // S
-        'ß' => "ss",
-        // T (Thorn)
-        'Þ' | 'þ' => "th",
-        // U
-        'Ù' | 'Ú' | 'Û' | 'Ü' | 'ù' | 'ú' | 'û' | 'ü' => "u",
-        // Y
-        'Ý' | 'Ÿ' | 'ý' | 'ÿ' => "y",
-        // Z
-        'Ź' | 'Ż' | 'Ž' | 'ź' | 'ż' | 'ž' => "z",
-        // Anything else is a separator
-        _ => "-",
+    if let Some(s) = special_latin(c) {
+        return s;
     }
+
+    // NFD fallback: covers any precomposed Latin letter whose canonical
+    // decomposition starts with an ASCII letter (À, é, Č, Ą, ș, İ…).
+    if let Some(base) = c.nfd().find(|x| !is_combining_mark(*x)) {
+        if base != c && base.is_ascii_alphabetic() {
+            return ascii_alnum_to_lower(base);
+        }
+    }
+    "-"
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -164,13 +151,17 @@ fn trim_separators(s: &str) -> String {
 /// Transform a filename **stem** (without extension) into a clean ASCII slug.
 ///
 /// Pipeline:
-/// 1. Transliterate every character.
-/// 2. Collapse consecutive `-`.
-/// 3. Remove `-` adjacent to `_` (`_-` → `_`, `-_` → `_`).
-/// 4. Collapse consecutive `_` (step 3 can produce `__` from e.g. `_-_`).
-/// 5. Trim leading / trailing `-` and `_`.
+/// 1. Normalise the input to NFD so accented letters split into base + marks.
+///    This makes the transformation idempotent regardless of whether the
+///    input filename was stored as NFC (`café`) or NFD (`cafe\u{0301}`).
+/// 2. Transliterate every character (combining marks become empty).
+/// 3. Collapse consecutive `-`.
+/// 4. Remove `-` adjacent to `_` (`_-` → `_`, `-_` → `_`).
+/// 5. Collapse consecutive `_` (step 4 can produce `__` from e.g. `_-_`).
+/// 6. Trim leading / trailing `-` and `_`.
+#[must_use]
 pub fn transform_stem(stem: &str) -> String {
-    let raw: String = stem.chars().map(transliterate_char).collect();
+    let raw: String = stem.nfd().map(transliterate_char).collect();
     let collapsed = collapse_dashes(&raw);
     let fixed = fix_underscore_dash(&collapsed);
     let fixed = collapse_underscores(&fixed);
