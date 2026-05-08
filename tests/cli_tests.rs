@@ -301,7 +301,16 @@ fn test_unknown_flag_rejected() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.to_lowercase().contains("unknown"));
+    let lower = stderr.to_lowercase();
+    // Accept any of the common wordings (our own "Unknown flag", clap's
+    // "unexpected argument", or "unrecognized") so the test stays stable
+    // across argument-parser changes.
+    assert!(
+        lower.contains("unknown") || lower.contains("unexpected") || lower.contains("unrecognized"),
+        "stderr should explain that the flag is invalid, got: {stderr}"
+    );
+    // The bad flag itself must be echoed back to the user.
+    assert!(stderr.contains("--this-flag-does-not-exist"));
 }
 
 #[test]

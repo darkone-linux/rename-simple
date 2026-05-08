@@ -1,3 +1,4 @@
+use clap::Parser;
 use rename_files::{compute_renames, transform_filename, RenameOp, RenameTarget};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -7,20 +8,46 @@ use std::{env, fs, process};
 // CLI
 // ─────────────────────────────────────────────────────────────────────────────
 
-fn usage(program: &str) {
-    eprintln!("Usage: {program} [OPTIONS] [DIR]");
-    eprintln!();
-    eprintln!("Rename files and/or directories in DIR (default: current directory)");
-    eprintln!("by normalising accented characters, replacing spaces and special");
-    eprintln!("chars with `-`, and lowercasing everything.");
-    eprintln!();
-    eprintln!("Options:");
-    eprintln!("  -f              Rename files only (default: files + directories)");
-    eprintln!("  -d              Rename directories only");
-    eprintln!("  -r, --recursive Process subdirectories recursively");
-    eprintln!("  -v, --verbose   Show details of what is being renamed");
-    eprintln!("  -n, --dry-run   Show what would be renamed without touching any entry");
-    eprintln!("  -h, --help      Print this help message");
+/// Command-line interface, parsed by `clap`.
+///
+/// Mutual exclusion between `-f` and `-d` is enforced by `conflicts_with`,
+/// so clap rejects `rename-simple -f -d` at parse time with a message that
+/// mentions both flags.
+#[derive(Parser, Debug)]
+#[command(
+    name = "rename-simple",
+    version,
+    about = "Rename files by normalising accented characters, spaces and \
+             special chars to clean ASCII slugs",
+    long_about = None,
+)]
+// Five independent flags is normal for a CLI; refactoring into a state
+// enum would obscure the clap derive layout without simplifying the call
+// sites.
+#[allow(clippy::struct_excessive_bools)]
+struct Cli {
+    /// Rename files only (default: files + directories)
+    #[arg(short = 'f', conflicts_with = "dirs_only")]
+    files_only: bool,
+
+    /// Rename directories only
+    #[arg(short = 'd')]
+    dirs_only: bool,
+
+    /// Process subdirectories recursively
+    #[arg(short, long)]
+    recursive: bool,
+
+    /// Show details of what is being renamed
+    #[arg(short, long)]
+    verbose: bool,
+
+    /// Show what would be renamed without touching any entry
+    #[arg(short = 'n', long = "dry-run")]
+    dry_run: bool,
+
+    /// Target directory (default: current directory)
+    dir: Option<PathBuf>,
 }
 
 struct Config {
@@ -31,64 +58,20 @@ struct Config {
     verbose: bool,
 }
 
-fn parse_args() -> Result<Config, String> {
-    let args: Vec<String> = env::args().collect();
-    let program = &args[0];
-
-    let mut dry_run = false;
-    let mut recursive = false;
-    let mut verbose = false;
-    let mut files_only = false;
-    let mut dirs_only = false;
-    let mut dir: Option<PathBuf> = None;
-
-    let mut i = 1;
-    while i < args.len() {
-        match args[i].as_str() {
-            "-h" | "--help" => {
-                usage(program);
-                process::exit(0);
-            }
-            "-n" | "--dry-run" => {
-                dry_run = true;
-            }
-            "-v" | "--verbose" => {
-                verbose = true;
-            }
-            "-r" | "--recursive" => {
-                recursive = true;
-            }
-            "-f" => {
-                files_only = true;
-            }
-            "-d" => {
-                dirs_only = true;
-            }
-            flag if flag.starts_with('-') => {
-                return Err(format!("Unknown flag: {flag}"));
-            }
-            path => {
-                if dir.is_some() {
-                    return Err("Too many positional arguments.".to_owned());
-                }
-                dir = Some(PathBuf::from(path));
-            }
-        }
-        i += 1;
-    }
-
-    if files_only && dirs_only {
-        return Err("-f and -d are mutually exclusive.".to_owned());
-    }
-
-    let target = match (files_only, dirs_only) {
+/// Convert the parsed `Cli` into the runtime `Config`, performing the only
+/// validation `clap` cannot express declaratively: that the target path is an
+/// existing directory.
+fn build_config(cli: Cli) -> Result<Config, String> {
+    let target = match (cli.files_only, cli.dirs_only) {
         (true, false) => RenameTarget::FilesOnly,
         (false, true) => RenameTarget::DirsOnly,
         _ => RenameTarget::All,
     };
 
-    let dir =
-        dir.unwrap_or_else(|| env::current_dir().expect("Cannot determine current directory"));
+    let dir = cli.dir.map_or_else(
+        || env::current_dir().map_err(|e| format!("Cannot determine current directory: {e}")),
+        Ok,
+    )?;
 
     if !dir.is_dir() {
         return Err(format!("'{}' is not a directory.", dir.display()));
@@ -96,10 +79,10 @@ fn parse_args() -> Result<Config, String> {
 
     Ok(Config {
         dir,
-        dry_run,
-        recursive,
+        dry_run: cli.dry_run,
+        recursive: cli.recursive,
         target,
-        verbose,
+        verbose: cli.verbose,
     })
 }
 
@@ -267,7 +250,10 @@ fn process_dir(dir: &Path, config: &Config, counters: &mut Counters) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn main() {
-    let config = match parse_args() {
+    // `Cli::parse()` exits the process on parse errors and on `--help` /
+    // `--version`, so anything reaching `build_config` already has a
+    // syntactically valid command line.
+    let config = match build_config(Cli::parse()) {
         Ok(c) => c,
         Err(msg) => {
             eprintln!("Error: {msg}");

@@ -139,6 +139,6 @@ _pkgs_nixos:
 # ─── Cleanup ───────────────────────────────────────────────────────────────
 
 # Deep clean: remove all build artifacts (cargo + packaging output)
-mrproper:
+clean:
     cargo clean
     rm -rf target/pkgs

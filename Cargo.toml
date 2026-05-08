@@ -19,6 +19,7 @@ name = "rename_files"
 path = "src/lib.rs"
 
 [dependencies]
+clap = { version = "4", features = ["derive"] }
 unicode-normalization = "0.1"
 
 [dev-dependencies]
