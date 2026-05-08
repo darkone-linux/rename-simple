@@ -9,6 +9,7 @@ pkgs.mkShell {
     clippy
     gh
     just
+    nixfmt
     pkg-config
     rust-analyzer
     rustc
