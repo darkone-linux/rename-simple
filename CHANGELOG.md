@@ -11,11 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `-a`, `--all` flag to rename both files and directories (replaces the former implicit default)
 - `--version` / `-V` flag (exposed via clap)
 - Shell alias tip in README: `alias rsa='rename-simple -a'`
+- `tests/unix_tests.rs`: new integration tests covering symlinks and invalid UTF-8 filenames
+- Justfile: `just bump [patch|minor|major]` and `just release` to automate version bumps and publishing
 
 ### Changed
 - Running `rename-simple` without a target-mode flag (`-f`, `-d`, or `-a`) now prints help and exits cleanly instead of processing the current directory
 - `-f`, `-d`, and `-a` are mutually exclusive; combining any two is rejected at parse time
 - README examples updated to reflect the new explicit flags
+- Build hardened: `clippy::pedantic` enforced, `unsafe_code = "deny"`, MSRV pinned to 1.70, release profile optimised (`lto`, `strip`, `panic = "abort"`)
 
 ## [0.2.1] - 2026-05-07
 
