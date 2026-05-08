@@ -155,19 +155,19 @@ fn apply_ops(ops: &[RenameOp], dry_run: bool, verbose: bool, counters: &mut Coun
 
         if dry_run {
             if verbose {
-                println!("  {} → {}", from_name, to_name);
+                println!("  {from_name} → {to_name}");
             }
             counters.renamed += 1;
         } else {
             match fs::rename(&op.from, &op.to) {
                 Ok(()) => {
                     if verbose {
-                        println!("  {} → {}", from_name, to_name);
+                        println!("  {from_name} → {to_name}");
                     }
                     counters.renamed += 1;
                 }
                 Err(e) => {
-                    eprintln!("  ✗ Error renaming '{}': {}", from_name, e);
+                    eprintln!("  ✗ Error renaming '{from_name}': {e}");
                     counters.errors += 1;
                 }
             }
@@ -182,14 +182,13 @@ fn collect_subdirs(dir: &Path) -> Vec<PathBuf> {
         return Vec::new();
     };
     read_dir
-        .filter_map(|e| e.ok())
+        .filter_map(Result::ok)
         .map(|e| e.path())
         .filter(|p| p.is_dir())
         .filter(|p| {
             p.file_name()
                 .and_then(|n| n.to_str())
-                .map(|n| !n.starts_with('.'))
-                .unwrap_or(false)
+                .is_some_and(|n| !n.starts_with('.'))
         })
         .collect()
 }

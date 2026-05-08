@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 /// - Accented/special letters are mapped to their base ASCII form.
 /// - Everything else (spaces, punctuation, unknown chars…) returns `"-"`,
 ///   which will act as a separator marker in the pipeline.
+#[must_use]
 pub fn transliterate_char(c: char) -> &'static str {
     // Fast path: plain ASCII
     if c.is_ascii_digit() {
@@ -187,7 +188,7 @@ fn split_extension(filename: &str) -> (&str, String) {
     let lower = filename.to_ascii_lowercase();
 
     for &double_ext in DOUBLE_EXTENSIONS {
-        let suffix = format!(".{}", double_ext);
+        let suffix = format!(".{double_ext}");
         if lower.ends_with(&suffix) {
             let stem = &filename[..filename.len() - suffix.len()];
             return (stem, suffix);
@@ -214,6 +215,7 @@ fn split_extension(filename: &str) -> (&str, String) {
 /// All other extensions are simply lowercased.
 /// The stem goes through the full `transform_stem` pipeline.
 /// Hidden files (names starting with `.`) are returned unchanged.
+#[must_use]
 pub fn transform_filename(filename: &str) -> String {
     // Leave hidden files alone
     if filename.starts_with('.') {
@@ -224,10 +226,10 @@ pub fn transform_filename(filename: &str) -> String {
     let new_stem = transform_stem(stem);
 
     if new_stem.is_empty() {
-        return format!("unnamed{}", ext);
+        return format!("unnamed{ext}");
     }
 
-    format!("{}{}", new_stem, ext)
+    format!("{new_stem}{ext}")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
