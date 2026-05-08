@@ -4,7 +4,7 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 version := `sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml`
-arch    := `dpkg --print-architecture 2>/dev/null || echo amd64`
+arch := `dpkg --print-architecture 2>/dev/null || echo amd64`
 
 # Justfile help
 _default:
@@ -13,49 +13,60 @@ _default:
 # ─── Validation & Quality Gate (matches AGENTS.md) ─────────────────────────
 
 # Check that every source file is rustfmt-clean
+[group('check')]
 fmt-check:
     cargo fmt --all --check
 
 # Run clippy with all targets/features and deny warnings
+[group('check')]
 lint:
     cargo clippy --all-targets --all-features -- -D warnings
 
 # Run the full test suite
+[group('check')]
 unit:
     cargo test
 
 # Audit dependencies for known vulnerabilities (RustSec advisory DB)
+[group('check')]
 audit:
     cargo audit
 
 # Build the documentation to validate intra-doc links and docstrings
+[group('check')]
 doc:
     cargo doc --no-deps
 
 # Full validation gate: format check, lint, tests, audit, docs
+[group('check')]
 test: fmt-check lint unit audit doc
+
+# Alias used by CI: same as `test` (full quality gate)
+[group('check')]
+ci: test
 
 # ─── Day-to-day helpers ────────────────────────────────────────────────────
 
 # Auto-fix clippy warnings and reformat code
+[group('daily')]
 fix:
     cargo clippy --all-targets --all-features --fix --allow-dirty
     cargo fmt --all
 
 # Install the binary into ~/.cargo/bin
+[group('daily')]
 install:
     cargo install --path .
 
 # Remove the installed binary from ~/.cargo/bin
+[group('daily')]
 uninstall:
     cargo uninstall rename-simple
 
 # Preview the man page in a pager
+[group('daily')]
 man:
     man -l man/rename-simple.1
-
-# Alias used by CI: same as `test` (full quality gate)
-ci: test
 
 # ─── Release / packaging ───────────────────────────────────────────────────
 
@@ -68,6 +79,7 @@ _check_is_clean:
     fi
 
 # Bump the version number in Cargo.toml (patch | minor | major)
+[group('packaging')]
 bump level="patch":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -86,47 +98,61 @@ bump level="patch":
     echo "Next step: update CHANGELOG.md, then run: just release"
 
 # Full release: test → commit → tag → push → GitHub Release → cargo publish
+[group('packaging')]
 release:
     #!/usr/bin/env bash
     set -euo pipefail
     v=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)
     tag="v${v}"
 
-    # Guard: tag must not already exist
-    if git rev-parse "$tag" >/dev/null 2>&1; then
-        echo "Error: tag $tag already exists." >&2; exit 1
-    fi
-
     # Guard: CHANGELOG.md must have an entry for this version
     if ! grep -q "## \[${v}\]" CHANGELOG.md; then
         echo "Error: CHANGELOG.md has no entry for [${v}]. Update it first." >&2; exit 1
     fi
 
-    # Full quality gate
+    # Full quality gate (always run)
     just test
 
     # Commit Cargo.toml, Cargo.lock and CHANGELOG.md if anything is pending
     git add Cargo.toml Cargo.lock CHANGELOG.md
     git diff --cached --quiet || git commit -m "chore: release ${tag}"
 
-    # Annotated tag + push
-    git tag -a "$tag" -m "Release ${tag}"
+    # Annotated tag — only if not already present
+    if git rev-parse "$tag" >/dev/null 2>&1; then
+        echo "Tag $tag already exists — skipping tag creation."
+    else
+        git tag -a "$tag" -m "Release ${tag}"
+    fi
+
+    # Push branch + tags (idempotent: no-op when already up-to-date)
     git push origin main --follow-tags
 
-    # GitHub Release — notes extracted from CHANGELOG.md
-    notes=$(awk "/^## \[${v}\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
-    gh release create "$tag" --title "$tag" --notes "$notes"
+    # GitHub Release — skip if already exists
+    if gh release view "$tag" >/dev/null 2>&1; then
+        echo "GitHub release $tag already exists — skipping."
+    else
+        notes=$(awk "/^## \[${v}\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
+        gh release create "$tag" --title "$tag" --notes "$notes"
+        echo "GitHub release $tag created."
+    fi
 
-    # Publish to crates.io
-    cargo publish
+    # Publish to crates.io — skip if this version is already published
+    if curl -sf "https://crates.io/api/v1/crates/rename-simple/${v}" >/dev/null 2>&1; then
+        echo "crates.io rename-simple ${v} already published — skipping."
+    else
+        cargo publish
+        echo "crates.io rename-simple ${v} published."
+    fi
 
-    echo "Released ${tag} — crates.io + GitHub ✓"
+    echo "Release ${tag} complete ✓"
 
 # Build package for crates.io
+[group('packaging')]
 package: _check_is_clean
     cargo package
 
 # Build Debian .deb and NixOS packages
+[group('packaging')]
 pkgs: _check_is_clean _pkgs_deb _pkgs_nixos
 
 # Build Debian .deb package
@@ -194,6 +220,7 @@ _pkgs_nixos:
 # ─── Cleanup ───────────────────────────────────────────────────────────────
 
 # Deep clean: remove all build artifacts (cargo + packaging output)
+[group('daily')]
 clean:
     cargo clean
     rm -rf target/pkgs
