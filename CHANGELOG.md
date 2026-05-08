@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-05-08
+
+### Added
+- `-a`, `--all` flag to rename both files and directories (replaces the former implicit default)
+- `--version` / `-V` flag (exposed via clap)
+- Shell alias tip in README: `alias rsa='rename-simple -a'`
+
+### Changed
+- Running `rename-simple` without a target-mode flag (`-f`, `-d`, or `-a`) now prints help and exits cleanly instead of processing the current directory
+- `-f`, `-d`, and `-a` are mutually exclusive; combining any two is rejected at parse time
+- README examples updated to reflect the new explicit flags
+
 ## [0.2.1] - 2026-05-07
 
 ### Added
