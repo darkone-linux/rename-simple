@@ -127,13 +127,33 @@ release:
     # Push branch + tags (idempotent: no-op when already up-to-date)
     git push origin main --follow-tags
 
-    # GitHub Release — skip if already exists
+    # Build binary and .deb for GitHub release assets
+    just package all
+
+    # GitHub Release — skip if already exists; upload assets idempotently
     if gh release view "$tag" >/dev/null 2>&1; then
-        echo "GitHub release $tag already exists — skipping."
+        echo "GitHub release $tag already exists — checking assets."
+        if ! gh release view "$tag" --json assets -q '.assets[].name' \
+            | grep -qx 'rename-simple'; then
+            gh release upload "$tag" target/release/rename-simple
+            echo "  → uploaded rename-simple binary"
+        else
+            echo "  → rename-simple binary already present — skipping"
+        fi
+        deb_file="rename-simple_{{ version }}_{{ arch }}.deb"
+        if ! gh release view "$tag" --json assets -q '.assets[].name' \
+            | grep -qx "$deb_file"; then
+            gh release upload "$tag" "target/pkgs/debian/$deb_file"
+            echo "  → uploaded $deb_file"
+        else
+            echo "  → $deb_file already present — skipping"
+        fi
     else
         notes=$(awk "/^## \[${v}\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
-        gh release create "$tag" --title "$tag" --notes "$notes"
-        echo "GitHub release $tag created."
+        gh release create "$tag" --title "$tag" --notes "$notes" \
+            target/release/rename-simple \
+            "target/pkgs/debian/rename-simple_{{ version }}_{{ arch }}.deb"
+        echo "GitHub release $tag created with artifacts."
     fi
 
     # Publish to crates.io — skip if this version is already published
@@ -146,14 +166,31 @@ release:
 
     echo "Release ${tag} complete ✓"
 
-# Build package for crates.io
+# Build packages: cargo (crates.io), deb (Debian .deb), nix (NixOS), all (default)
 [group('packaging')]
-package: _check_is_clean
-    cargo package
-
-# Build Debian .deb and NixOS packages
-[group('packaging')]
-pkgs: _check_is_clean _pkgs_deb _pkgs_nixos
+package type="all": _check_is_clean
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{ type }}" in
+        all)
+            cargo package
+            just _pkgs_deb
+            just _pkgs_nix
+            ;;
+        cargo)
+            cargo package
+            ;;
+        deb)
+            just _pkgs_deb
+            ;;
+        nix)
+            just _pkgs_nix
+            ;;
+        *)
+            echo "Usage: just package [all|cargo|deb|nix]" >&2
+            exit 1
+            ;;
+    esac
 
 # Build Debian .deb package
 _pkgs_deb:
@@ -196,12 +233,12 @@ _pkgs_deb:
            target/pkgs/debian/data.tar.gz
 
 # Build NixOS package
-_pkgs_nixos:
+_pkgs_nix:
     cargo build --release
-    rm -rf target/pkgs/nixos
-    mkdir -p target/pkgs/nixos
-    cp target/release/rename-simple target/pkgs/nixos/
-    gzip -9cn < man/rename-simple.1 > target/pkgs/nixos/rename-simple.1.gz
+    rm -rf target/pkgs/nix
+    mkdir -p target/pkgs/nix
+    cp target/release/rename-simple target/pkgs/nix/
+    gzip -9cn < man/rename-simple.1 > target/pkgs/nix/rename-simple.1.gz
     printf "%s\n" \
         "{ pkgs ? import <nixpkgs> {} }:" \
         "pkgs.stdenv.mkDerivation {" \
@@ -214,8 +251,8 @@ _pkgs_nixos:
         "    cp \${./rename-simple.1.gz} \$out/share/man/man1/" \
         "  '';" \
         "}" \
-        > target/pkgs/nixos/default.nix
-    nixfmt target/pkgs/nixos/default.nix
+        > target/pkgs/nix/default.nix
+    nixfmt target/pkgs/nix/default.nix
 
 # ─── Cleanup ───────────────────────────────────────────────────────────────
 
