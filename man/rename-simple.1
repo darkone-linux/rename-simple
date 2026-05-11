@@ -1,4 +1,4 @@
-.TH RENAME-SIMPLE 1 "2026-05-07" "rename-simple 0.2.1" "User Commands"
+.TH RENAME-SIMPLE 1 "2026-05-11" "rename-simple 0.2.2" "User Commands"
 .SH NAME
 rename-simple \- clean filenames to lowercase, ASCII-safe slugs
 .SH SYNOPSIS
@@ -9,6 +9,10 @@ rename-simple \- clean filenames to lowercase, ASCII-safe slugs
 renames files and/or directories in \fIDIR\fR (default: current directory)
 by normalising accented characters, replacing spaces and special characters
 with hyphens, and lowercasing everything.
+
+Exactly one of \fB\-f\fR, \fB\-d\fR or \fB\-a\fR must be specified to
+select what to rename. Without any of these flags the program prints its
+help and exits.
 .PP
 The transformation pipeline is:
 .IP 1. 4
@@ -34,10 +38,13 @@ By default the program produces no output on success. Use
 .SH OPTIONS
 .TP
 .B \-f
-Rename files only (default: files and directories).
+Rename files only.
 .TP
 .B \-d
-Rename directories only (default: files and directories).
+Rename directories only.
+.TP
+.B \-a, \-\-all
+Rename both files and directories.
 .TP
 .B \-r, \-\-recursive
 Process subdirectories recursively.
@@ -59,14 +66,14 @@ All entries were renamed successfully (or no entries needed renaming).
 An error occurred (invalid arguments, I/O error, etc.).
 .SH EXAMPLES
 .TP
-Rename files in the current directory
-rename-simple
+Rename both files and directories in the current directory
+rename-simple \-a
 .TP
 Rename files in a specific directory with verbose output
-rename-simple \-v ~/Downloads
+rename-simple \-f \-v ~/Downloads
 .TP
 Preview what would be renamed without touching anything
-rename-simple \-n \-v
+rename-simple \-a \-n \-v
 .TP
 Recursively rename only files (skip directories)
 rename-simple \-f \-r
