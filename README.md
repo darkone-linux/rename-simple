@@ -18,7 +18,7 @@ A small Rust CLI tool that renames files and directories to clean, ASCII-safe sl
 - Strips leading and trailing `-` / `_` before the extension
 - Preserves known compound extensions (`.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`)
 - Keeps extensions separate only when they are ASCII alphanumeric and ≤10 characters
-  (e.g. `.tét` → absorbed as `-tet`; `.cuicuicuicui` (12 chars) → absorbed as `-cuicuicuicui`)
+  (e.g. `.tét` → absorbed as `-tet`; `.abcdefghijkl` (12 chars) → absorbed as `-abcdefghijkl`)
 - Skips hidden files (`.gitignore`, `.DS_Store`…) and flags naming conflicts
 
 ## Installation
