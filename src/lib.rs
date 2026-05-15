@@ -186,18 +186,29 @@ fn split_extension(filename: &str) -> (&str, String) {
         }
     }
 
-    // Standard single-extension split via Path
+    // Standard single-extension split via Path.
+    // An extension is only valid when every character is ASCII alphanumeric
+    // AND the total length does not exceed 10.  Non-ASCII characters (accents,
+    // spaces, punctuation, …) or a length > 10 cause the candidate extension
+    // to be re-absorbed into the stem so it goes through the full
+    // transliteration pipeline.
     let path = Path::new(filename);
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| format!(".{}", e.to_ascii_lowercase()))
-        .unwrap_or_default();
-    let stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or(filename);
-    (stem, ext)
+    let ext_str = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+
+    let valid_ext = !ext_str.is_empty()
+        && ext_str.chars().all(|c| c.is_ascii_alphanumeric())
+        && ext_str.len() <= 10;
+
+    if valid_ext {
+        let ext = format!(".{}", ext_str.to_ascii_lowercase());
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(filename);
+        (stem, ext)
+    } else {
+        (filename, String::new())
+    }
 }
 
 /// Transform a full filename (stem + extension).

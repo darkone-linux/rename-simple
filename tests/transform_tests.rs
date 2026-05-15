@@ -655,4 +655,90 @@ mod transform_filename_tests {
         // so it falls back to the dash separator.
         assert_eq!(transform_filename("abc\u{200B}def.txt"), "abc-def.txt");
     }
+
+    // —────────────── Extension validity checks (≤ 10 ASCII alnum) ──────────────
+    #[test]
+    fn extension_with_non_ascii_is_absorbed_into_stem() {
+        // "tét" contains é which is not ASCII alphanumeric → absorbed
+        assert_eq!(transform_filename("à faire .tét"), "a-faire-tet");
+    }
+
+    #[test]
+    fn extension_with_space_is_absorbed_into_stem() {
+        // "t t" contains a space → not ASCII alphanumeric → absorbed
+        assert_eq!(transform_filename("à faire.t t"), "a-faire-t-t");
+    }
+
+    #[test]
+    fn extension_with_punctuation_is_absorbed_into_stem() {
+        // "file.txt.bak" where "bak" is valid → "file-txt.bak"
+        // But "file.txt?" where ext is "txt?" → "?" not alnum, absorbed
+        // This would be: "notes.txt?" → ext "txt?" → absorbed → "notes-txt-"
+        // Actually let's use a clearer case:
+        // "data.2024!" → ext "2024!" → "!" not alnum → absorbed
+        assert_eq!(transform_filename("data.2024!old"), "data-2024-old");
+    }
+
+    #[test]
+    fn ascii_only_extension_under_ten_is_kept() {
+        // Extensions that are purely ASCII alphanumeric and ≤ 10 stay
+        assert_eq!(transform_filename("à faire .cuicui"), "a-faire.cuicui");
+        assert_eq!(transform_filename("document.PDF"), "document.pdf");
+        assert_eq!(transform_filename("image.JPEG"), "image.jpeg");
+    }
+
+    #[test]
+    fn extension_exactly_ten_chars_is_kept() {
+        assert_eq!(transform_filename("exact.abcdefghij"), "exact.abcdefghij");
+    }
+
+    #[test]
+    fn extension_eleven_chars_is_absorbed() {
+        assert_eq!(
+            transform_filename("toolong.abcdefghijk"),
+            "toolong-abcdefghijk"
+        );
+    }
+
+    #[test]
+    fn long_extension_with_mixed_stem_dots_is_absorbed() {
+        // multi-dot file where the last segment exceeds 10 alnum chars
+        assert_eq!(
+            transform_filename("archive.backup.cuicuicuicui"),
+            "archive-backup-cuicuicuicui"
+        );
+    }
+
+    #[test]
+    fn double_extensions_still_preserved() {
+        // Double-ext check still happens before the 10-char rule
+        assert_eq!(
+            transform_filename("mon archive.TAR.GZ"),
+            "mon-archive.tar.gz"
+        );
+        assert_eq!(
+            transform_filename("mon  Archive.TaR.GZ"),
+            "mon-archive.tar.gz"
+        );
+        assert_eq!(
+            transform_filename("mon  Archive.TaR.Bz2"),
+            "mon-archive.tar.bz2"
+        );
+        assert_eq!(
+            transform_filename("mon  Archive.TaR .Bz2"),
+            "mon-archive-tar.bz2"
+        );
+        assert_eq!(transform_filename("fichier.tar.bz2"), "fichier.tar.bz2");
+    }
+
+    #[test]
+    fn compound_ext_with_long_last_segment_falls_through_to_single_ext_rule() {
+        // "archive.tar.gzipconf" is NOT a known compound ext.
+        // The last segment is "gzipconf" (8 alnum, ≤10) → valid single ext
+        // file_stem = "archive.tar", ext = ".gzipconf"
+        assert_eq!(
+            transform_filename("archive.tar.gzipconf"),
+            "archive-tar.gzipconf"
+        );
+    }
 }
