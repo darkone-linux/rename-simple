@@ -1,4 +1,4 @@
-.TH RENAME-SIMPLE 1 "2026-05-11" "rename-simple 0.2.2" "User Commands"
+.TH RENAME-SIMPLE 1 "2026-05-15" "rename-simple 0.2.3" "User Commands"
 .SH NAME
 rename-simple \- clean filenames to lowercase, ASCII-safe slugs
 .SH SYNOPSIS
@@ -30,8 +30,13 @@ Collapse consecutive underscores.
 Strip leading and trailing hyphens and underscores.
 .PP
 Compound extensions (\fI.tar.gz\fR, \fI.tar.bz2\fR, \fI.tar.xz\fR,
-\fI.tar.zst\fR) are preserved. Hidden files (names starting with a dot) are
-never modified.
+\fI.tar.zst\fR) are preserved. An extension is only kept separate when it
+consists entirely of ASCII alphanumeric characters and is at most 10 characters
+long.  Extensions containing accents, spaces, punctuation or exceeding 10
+characters are re-absorbed into the filename stem and processed through the
+full transliteration pipeline.
+.PP
+Hidden files (names starting with a dot) are never modified.
 .PP
 By default the program produces no output on success. Use
 \fB\-v\fR/\fB\-\-verbose\fR to display details.
