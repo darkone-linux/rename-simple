@@ -17,6 +17,8 @@ A small Rust CLI tool that renames files and directories to clean, ASCII-safe sl
 - Preserves `_`; cleans up `_-` and `-_` sequences to `_`
 - Strips leading and trailing `-` / `_` before the extension
 - Preserves known compound extensions (`.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`)
+- Keeps extensions separate only when they are ASCII alphanumeric and ≤10 characters
+  (e.g. `.tét` → absorbed as `-tet`; `.cuicuicuicui` (12 chars) → absorbed as `-cuicuicuicui`)
 - Skips hidden files (`.gitignore`, `.DS_Store`…) and flags naming conflicts
 
 ## Installation
@@ -61,6 +63,8 @@ $ rename-simple -a --dry-run ~/Downloads
   Réunion d'équipe (2024).docx    →  reunion-d-equipe-2024.docx
   backup.TAR.GZ                   →  backup.tar.gz
   Café Montréal.jpg               →  cafe-montreal.jpg
+  à faire .tét                    →  a-faire-tet
+  notes.cuicuicuicui              →  notes-cuicuicuicui
 ```
 
 ### Rename files only
