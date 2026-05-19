@@ -97,7 +97,7 @@ bump level="patch":
     echo "Version bumped: ${current} → ${new}"
     echo "Next step: update CHANGELOG.md, then run: just release"
 
-# Full release: test → commit → tag → push → GitHub Release → cargo publish
+# Full release: test → commit → tag → push → package → GitHub Release → cargo publish
 [group('packaging')]
 release:
     #!/usr/bin/env bash
