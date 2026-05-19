@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] - 2026-05-19
+
+### Security
+- **Recursive symlink escape (C2)**: `-r` no longer follows symlinks that
+  point at directories. `collect_subdirs` now uses `symlink_metadata`, so
+  a symlink inside the target tree cannot redirect recursion to files
+  outside that tree or trigger an unbounded loop.
+- **TOCTOU on rename (C1)**: a new `rename_no_clobber` helper replaces
+  `fs::rename`. On Linux it uses `renameat2(RENAME_NOREPLACE)` via
+  `rustix`, closing the race window between the `op.to.exists()` pre-check
+  and the syscall itself. On other Unix and Windows, behaviour is
+  `try_exists` + `fs::rename` (Windows `rename` is already non-clobbering).
+
+### Added
+- Invalid-UTF-8 entries now produce a stderr warning in `-v` mode instead
+  of being silently dropped from the report.
+- 19 new tests covering the audit surface:
+  - 10 in `tests/transform_tests.rs` — RTL scripts, ZWJ emoji, variation
+    selector, NUL byte, RTL override, path-traversal segments, `unnamed`
+    collision, NFD/NFC equivalence.
+  - 3 in `tests/cli_tests.rs` — `unnamed.<ext>` collisions and
+    dry-run-preserves-data.
+  - 3 in `tests/recursive_tests.rs` — 15-level deep nesting, descent into
+    renamed directory, independent sibling subdirectories.
+  - 3 in `tests/unix_tests.rs` — directory-symlink not followed, symlink
+    loop terminates, read-only parent does not panic, invalid-UTF-8
+    verbose warning.
+
+### Changed
+- Replaced four `file_name().unwrap()` calls in the rename / conflict
+  reporting paths with a `display_name` helper that falls back to `"?"`
+  when the file name is absent.
+
+### Dependencies
+- Added `rustix 0.38` (Linux target only, `fs` feature) for the
+  `renameat2(RENAME_NOREPLACE)` syscall wrapper.
+
 ## [0.2.3] - 2026-05-15
 
 ### Added
