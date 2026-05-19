@@ -232,27 +232,9 @@ _pkgs_deb:
            target/pkgs/debian/control.tar.gz \
            target/pkgs/debian/data.tar.gz
 
-# Build NixOS package
+# Build and verify the Nix flake package
 _pkgs_nix:
-    cargo build --release
-    rm -rf target/pkgs/nix
-    mkdir -p target/pkgs/nix
-    cp target/release/rename-simple target/pkgs/nix/
-    gzip -9cn < man/rename-simple.1 > target/pkgs/nix/rename-simple.1.gz
-    printf "%s\n" \
-        "{ pkgs ? import <nixpkgs> {} }:" \
-        "pkgs.stdenv.mkDerivation {" \
-        "  pname = \"rename-simple\";" \
-        "  version = \"{{ version }}\";" \
-        "  dontUnpack = true;" \
-        "  installPhase = ''" \
-        "    mkdir -p \$out/bin \$out/share/man/man1" \
-        "    cp \${./rename-simple} \$out/bin/" \
-        "    cp \${./rename-simple.1.gz} \$out/share/man/man1/" \
-        "  '';" \
-        "}" \
-        > target/pkgs/nix/default.nix
-    nixfmt target/pkgs/nix/default.nix
+    nix build .#rename-simple
 
 # ─── Cleanup ───────────────────────────────────────────────────────────────
 
