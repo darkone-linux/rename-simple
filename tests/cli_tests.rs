@@ -437,6 +437,75 @@ fn test_existing_destination_keeps_source_intact() {
 }
 
 #[test]
+fn test_unnamed_collision_two_sources_skipped() {
+    // Two filenames that both transliterate to "unnamed.txt" must NOT be
+    // collapsed into a single file; filter_conflicts must detect the
+    // duplicate destination and skip them.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("!!!.txt"), "1").unwrap();
+    fs::write(dir.join("***.txt"), "2").unwrap();
+
+    let output = cmd().arg("-a").arg(dir).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("!!!.txt").exists(), "first source must stay");
+    assert!(dir.join("***.txt").exists(), "second source must stay");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.to_uppercase().contains("CONFLICT"));
+}
+
+#[test]
+fn test_unnamed_collides_with_existing_destination() {
+    // A single non-alpha-num source name would map to "unnamed.txt"; when
+    // that destination is already taken, the source must be left in place
+    // and the existing file must NOT be overwritten.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("!!!.txt"), "source").unwrap();
+    fs::write(dir.join("unnamed.txt"), "destination").unwrap();
+
+    let output = cmd().arg("-a").arg(dir).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("!!!.txt").exists(), "source must stay put");
+    assert_eq!(
+        fs::read_to_string(dir.join("unnamed.txt")).unwrap(),
+        "destination",
+        "existing file must not be overwritten"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.to_uppercase().contains("CONFLICT") || stderr.to_uppercase().contains("EXISTS"),
+        "stderr should report the conflict: {stderr}"
+    );
+}
+
+#[test]
+fn test_existing_destination_preserved_under_dry_run_too() {
+    // Dry-run must not move data either: catch any future regression where
+    // the dry-run path accidentally invokes rename. Combined with the
+    // non-clobber rename helper, this guards both code paths.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("Café.txt"), "source").unwrap();
+    fs::write(dir.join("cafe.txt"), "destination").unwrap();
+
+    let output = cmd().arg("-a").arg("-n").arg(dir).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("Café.txt").exists());
+    assert_eq!(fs::read_to_string(dir.join("Café.txt")).unwrap(), "source");
+    assert_eq!(
+        fs::read_to_string(dir.join("cafe.txt")).unwrap(),
+        "destination"
+    );
+}
+
+#[test]
 fn test_three_way_conflict_all_skipped() {
     let temp_dir = tempfile::tempdir().unwrap();
     let dir = temp_dir.path();

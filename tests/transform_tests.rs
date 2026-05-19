@@ -741,4 +741,87 @@ mod transform_filename_tests {
             "archive-tar.gzipconf"
         );
     }
+
+    // — Security / edge-case characters (audit additions) ────────────────────
+    #[test]
+    fn rtl_arabic_only_becomes_unnamed() {
+        // Stem made entirely of non-Latin script collapses to empty → unnamed.
+        assert_eq!(transform_filename("السلام"), "unnamed");
+    }
+
+    #[test]
+    fn rtl_mixed_hebrew_and_latin_keeps_latin() {
+        // Hebrew letters fall through to dashes; Latin survives.
+        assert_eq!(transform_filename("hello שלום"), "hello");
+    }
+
+    #[test]
+    fn zwj_emoji_family_collapses_around_latin() {
+        // ZWJ (U+200D) is a Format char, not a combining mark — it must be
+        // replaced by a dash, not silently absorbed, so adjacent emoji and
+        // ZWJ collapse into a single dash and get trimmed.
+        assert_eq!(
+            transform_filename("family-\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}.txt"),
+            "family.txt"
+        );
+    }
+
+    #[test]
+    fn variation_selector_is_treated_as_combining() {
+        // U+FE0F (variation selector) has category Mn → dropped silently.
+        // The remaining letters survive untouched.
+        assert_eq!(transform_filename("file\u{FE0F}.txt"), "file.txt");
+    }
+
+    #[test]
+    fn null_byte_in_stem_becomes_dash_no_panic() {
+        // \0 is not alpha-num, not combining, no NFD decomposition → "-".
+        // No panic is the primary assertion; output shape is incidental.
+        assert_eq!(transform_filename("bad\0name.txt"), "bad-name.txt");
+    }
+
+    #[test]
+    fn rtl_override_control_becomes_dash() {
+        // U+202E (RIGHT-TO-LEFT OVERRIDE) is a Format char, not combining —
+        // must NOT silently survive into the output filename.
+        let out = transform_filename("file\u{202E}gnp.txt");
+        assert!(
+            !out.contains('\u{202E}'),
+            "RTL override must not survive: got {out:?}"
+        );
+        assert_eq!(out, "file-gnp.txt");
+    }
+
+    #[test]
+    fn path_traversal_segments_produce_no_slash_in_stem() {
+        // Real filenames cannot contain '/' on Unix; this guards the pure
+        // transformation against any accidental slash regression.
+        let out = transform_stem("../../etc/passwd");
+        assert!(
+            !out.contains('/') && !out.contains('\\'),
+            "transform_stem must never emit path separators: got {out:?}"
+        );
+        assert_eq!(out, "etc-passwd");
+    }
+
+    #[test]
+    fn unnamed_collision_is_documented_and_deterministic() {
+        // Two stems that reduce to "" share the same unnamed.<ext> destination.
+        // This is the M1 finding from the audit: collision is detected later
+        // by filter_conflicts in main.rs, but the transformation itself is
+        // deterministic.
+        assert_eq!(transform_filename("!!!.txt"), "unnamed.txt");
+        assert_eq!(transform_filename("***.txt"), "unnamed.txt");
+        assert_eq!(transform_filename("!!!.txt"), transform_filename("***.txt"));
+    }
+
+    #[test]
+    fn nfd_long_mixed_matches_nfc() {
+        use unicode_normalization::UnicodeNormalization;
+        let nfc = "Café_Résumé_Élève";
+        let nfd: String = nfc.nfd().collect();
+        assert_ne!(nfc, nfd.as_str(), "test fixture must actually differ");
+        assert_eq!(transform_stem(nfc), "cafe_resume_eleve");
+        assert_eq!(transform_stem(&nfd), transform_stem(nfc));
+    }
 }

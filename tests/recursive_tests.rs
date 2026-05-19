@@ -180,3 +180,76 @@ fn test_recursive_with_hidden_subdirs_skipped() {
     assert!(dir.join(".hidden").exists());
     assert!(dir.join("visible.txt").exists());
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Audit additions: stress + ordering guarantees
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_recursive_deep_nesting_terminates() {
+    // 15 levels of nesting: catches accidental stack overflow or
+    // combinatorial explosion in process_dir.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut current = temp_dir.path().to_path_buf();
+    let depth = 15usize;
+    for i in 0..depth {
+        current = current.join(format!("Niveau {i}"));
+        fs::create_dir(&current).unwrap();
+    }
+    fs::write(current.join("Fichier Profond.txt"), "deep").unwrap();
+
+    let output = cmd()
+        .arg("-a")
+        .arg("-r")
+        .arg(temp_dir.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "must not crash at depth {depth}");
+
+    // Walk the renamed tree end-to-end.
+    let mut walked = temp_dir.path().to_path_buf();
+    for i in 0..depth {
+        walked = walked.join(format!("niveau-{i}"));
+        assert!(walked.is_dir(), "missing renamed dir: {walked:?}");
+    }
+    assert!(walked.join("fichier-profond.txt").exists());
+}
+
+#[test]
+fn test_recursive_descends_into_renamed_dir_not_original() {
+    // After renaming "Mon Dossier" → "mon-dossier", recursion must follow
+    // the NEW path. effective_subdir_path is the function under test here.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::create_dir(dir.join("Mon Dossier")).unwrap();
+    fs::write(dir.join("Mon Dossier/Fichier Interne.txt"), "x").unwrap();
+
+    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(!dir.join("Mon Dossier").exists(), "parent must be renamed");
+    assert!(
+        dir.join("mon-dossier/fichier-interne.txt").exists(),
+        "child must be renamed inside the renamed parent"
+    );
+}
+
+#[test]
+fn test_recursive_processes_sibling_subdirs_independently() {
+    // Two parallel subdirectories, each renamed and each containing a file
+    // that must also be renamed inside the new parent path.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::create_dir(dir.join("Alpha Bêta")).unwrap();
+    fs::create_dir(dir.join("Gamma Delta")).unwrap();
+    fs::write(dir.join("Alpha Bêta/Un Fichier.txt"), "a").unwrap();
+    fs::write(dir.join("Gamma Delta/Autre Fichier.txt"), "g").unwrap();
+
+    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("alpha-beta/un-fichier.txt").exists());
+    assert!(dir.join("gamma-delta/autre-fichier.txt").exists());
+}

@@ -71,8 +71,135 @@ fn test_dangling_symlink_is_left_alone() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Invalid UTF-8 filenames
+// Symlinks — recursion must not escape the target tree (audit C2)
 // ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_recursive_does_not_descend_into_subdir_symlink() {
+    // Layout:
+    //   <root>/
+    //     inside/
+    //       link -> <root>/outside
+    //     outside/
+    //       Sécret Fichier.txt
+    //
+    // After `rename-simple -a -r <root>/inside`, the file inside `outside/`
+    // MUST NOT be renamed — recursion must never follow a symlinked dir.
+    let root = tempfile::tempdir().unwrap();
+    let inside = root.path().join("inside");
+    let outside = root.path().join("outside");
+    fs::create_dir(&inside).unwrap();
+    fs::create_dir(&outside).unwrap();
+
+    fs::write(outside.join("Sécret Fichier.txt"), "secret").unwrap();
+    std::os::unix::fs::symlink(&outside, inside.join("link")).unwrap();
+
+    let output = cmd().arg("-a").arg("-r").arg(&inside).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(
+        outside.join("Sécret Fichier.txt").exists(),
+        "recursion through a directory symlink must not rename files outside the target tree"
+    );
+    assert!(
+        !outside.join("secret-fichier.txt").exists(),
+        "no renamed twin must appear in the external directory"
+    );
+}
+
+#[test]
+fn test_recursive_symlink_loop_terminates() {
+    // dir/a -> dir/b, dir/b -> dir/a — a classic cycle. The program must
+    // terminate (Linux returns ELOOP after 40 hops; we still rely on the
+    // C2 fix to avoid following directory symlinks in the first place).
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    std::os::unix::fs::symlink(dir.join("b"), dir.join("a")).unwrap();
+    std::os::unix::fs::symlink(dir.join("a"), dir.join("b")).unwrap();
+
+    fs::write(dir.join("Real File.txt"), "x").unwrap();
+
+    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
+
+    assert!(output.status.success(), "must terminate without panic");
+    assert!(dir.join("real-file.txt").exists());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Failure modes — read-only parent (audit M3 surface)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_readonly_parent_yields_error_without_panic() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("Mon Fichier.txt"), "x").unwrap();
+
+    // Make the parent read-only: rename of the entry inside it must fail
+    // (EACCES) but the program must not panic.
+    let mut perms = fs::metadata(dir).unwrap().permissions();
+    perms.set_mode(0o555);
+    fs::set_permissions(dir, perms).unwrap();
+
+    // If perms can be bypassed (e.g. running as root, special FS), skip.
+    let probe_ok = fs::write(dir.join(".probe"), b"x").is_ok();
+    if probe_ok {
+        let _ = fs::remove_file(dir.join(".probe"));
+        let mut restore = fs::metadata(dir).unwrap().permissions();
+        restore.set_mode(0o755);
+        fs::set_permissions(dir, restore).unwrap();
+        eprintln!("skipping: chmod 0555 did not take effect on this environment");
+        return;
+    }
+
+    let output = cmd().arg("-a").arg(dir).output().unwrap();
+
+    // Restore writable perms BEFORE the temp dir tries to drop itself,
+    // otherwise tempfile cannot clean up.
+    let mut restore = fs::metadata(dir).unwrap().permissions();
+    restore.set_mode(0o755);
+    fs::set_permissions(dir, restore).unwrap();
+
+    assert!(
+        output.status.success(),
+        "exit must stay 0 on per-file errors"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.to_lowercase().contains("error"),
+        "per-file failure must be reported on stderr, got: {stderr}"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Invalid UTF-8 (audit M2 — verbose warning)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_invalid_utf8_filename_reports_warning_in_verbose() {
+    // Same setup as test_invalid_utf8_filename_does_not_panic, but with -v:
+    // the user must be told *which* entry was skipped instead of the rename
+    // silently dropping it.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    let bad_bytes: &[u8] = &[b'b', b'a', b'd', 0xff, 0xfe, b'.', b't', b'x', b't'];
+    let bad_name = OsStr::from_bytes(bad_bytes);
+    fs::write(dir.join(bad_name), "x").unwrap();
+    fs::write(dir.join("Bon Fichier.txt"), "y").unwrap();
+
+    let output = cmd().arg("-a").arg("-v").arg(dir).output().unwrap();
+
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.to_lowercase().contains("invalid")
+            || stderr.to_lowercase().contains("skip")
+            || stderr.to_lowercase().contains("non-utf"),
+        "verbose mode must surface the skipped non-UTF-8 entry, stderr was: {stderr}"
+    );
+}
 
 #[test]
 fn test_invalid_utf8_filename_does_not_panic() {

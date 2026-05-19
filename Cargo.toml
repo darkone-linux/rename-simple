@@ -22,6 +22,12 @@ path = "src/lib.rs"
 clap = { version = "4", features = ["derive"] }
 unicode-normalization = "0.1"
 
+# Used on Linux for renameat2(RENAME_NOREPLACE): refuses to overwrite the
+# destination, closing the TOCTOU window between `op.to.exists()` and
+# `fs::rename`. macOS/BSD fall back to a pre-check + std::fs::rename.
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { version = "0.38", features = ["fs"] }
+
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"

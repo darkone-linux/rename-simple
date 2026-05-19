@@ -1,8 +1,17 @@
 use clap::{CommandFactory, Parser};
 use rename_files::{compute_renames, transform_filename, RenameOp, RenameTarget};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{env, fs, process};
+
+/// Lossy display name for a path, with a stable fallback when `file_name()`
+/// is `None` (e.g. a path ending in `..`). Avoids the panicky `unwrap()` on
+/// `file_name()` in the rename / conflict reporting code paths.
+fn display_name(path: &Path) -> Cow<'_, str> {
+    path.file_name()
+        .map_or(Cow::Borrowed("?"), |n| n.to_string_lossy())
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CLI
@@ -108,14 +117,14 @@ fn filter_conflicts(ops: Vec<RenameOp>) -> Vec<RenameOp> {
         if dest_count[&op.to] > 1 {
             eprintln!(
                 "  ⚠  CONFLICT – skipping '{}': multiple entries would rename to '{}'",
-                op.from.file_name().unwrap().to_string_lossy(),
-                op.to.file_name().unwrap().to_string_lossy(),
+                display_name(&op.from),
+                display_name(&op.to),
             );
         } else if op.to.exists() {
             eprintln!(
                 "  ⚠  CONFLICT – skipping '{}': destination '{}' already exists",
-                op.from.file_name().unwrap().to_string_lossy(),
-                op.to.file_name().unwrap().to_string_lossy(),
+                display_name(&op.from),
+                display_name(&op.to),
             );
         } else {
             safe.push(op);
@@ -134,12 +143,40 @@ struct Counters {
     errors: usize,
 }
 
+/// Rename `from` to `to`, refusing to overwrite an existing destination.
+///
+/// Closes the TOCTOU window between the `op.to.exists()` pre-check in
+/// `filter_conflicts` and the actual rename:
+///
+/// - **Linux**: `renameat2(AT_FDCWD, from, AT_FDCWD, to, RENAME_NOREPLACE)`
+///   via `rustix` — atomic at the syscall level.
+/// - **Other Unix / Windows**: a pre-check `try_exists` followed by
+///   `std::fs::rename`. The race window remains in theory, but
+///   `std::fs::rename` on Windows is already non-clobbering.
+fn rename_no_clobber(from: &Path, to: &Path) -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use rustix::fs::{renameat_with, RenameFlags, CWD};
+        renameat_with(CWD, from, CWD, to, RenameFlags::NOREPLACE).map_err(std::io::Error::from)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        if to.try_exists()? {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "destination exists",
+            ));
+        }
+        fs::rename(from, to)
+    }
+}
+
 /// Apply a list of rename operations, printing each result.
 /// Updates `counters` in place.
 fn apply_ops(ops: &[RenameOp], dry_run: bool, verbose: bool, counters: &mut Counters) {
     for op in ops {
-        let from_name = op.from.file_name().unwrap().to_string_lossy();
-        let to_name = op.to.file_name().unwrap().to_string_lossy();
+        let from_name = display_name(&op.from);
+        let to_name = display_name(&op.to);
 
         if dry_run {
             if verbose {
@@ -147,7 +184,7 @@ fn apply_ops(ops: &[RenameOp], dry_run: bool, verbose: bool, counters: &mut Coun
             }
             counters.renamed += 1;
         } else {
-            match fs::rename(&op.from, &op.to) {
+            match rename_no_clobber(&op.from, &op.to) {
                 Ok(()) => {
                     if verbose {
                         println!("  {from_name} → {to_name}");
@@ -163,8 +200,34 @@ fn apply_ops(ops: &[RenameOp], dry_run: bool, verbose: bool, counters: &mut Coun
     }
 }
 
+/// Warn about entries whose filename is not valid UTF-8.
+///
+/// `compute_renames` skips these silently (it cannot transliterate bytes
+/// it cannot decode). In verbose mode we want the user to know which
+/// entries were ignored, otherwise a non-UTF-8 filename simply vanishes
+/// from the report.
+fn warn_invalid_utf8_entries(dir: &Path) {
+    let Ok(read_dir) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in read_dir.flatten() {
+        let name = entry.file_name();
+        if name.to_str().is_none() {
+            eprintln!(
+                "  ⚠  Skipping entry with invalid UTF-8 name: '{}'",
+                name.to_string_lossy()
+            );
+        }
+    }
+}
+
 /// Collect non-hidden subdirectories inside `dir`.
 /// Called BEFORE applying renames so we capture the original paths.
+///
+/// Symlinks pointing at directories are intentionally **not** followed:
+/// `symlink_metadata` returns the link's own metadata, so its file type is
+/// `Symlink`, not `Dir`. This prevents `-r` from escaping the target tree
+/// or looping on cyclic links.
 fn collect_subdirs(dir: &Path) -> Vec<PathBuf> {
     let Ok(read_dir) = fs::read_dir(dir) else {
         return Vec::new();
@@ -172,7 +235,11 @@ fn collect_subdirs(dir: &Path) -> Vec<PathBuf> {
     read_dir
         .filter_map(Result::ok)
         .map(|e| e.path())
-        .filter(|p| p.is_dir())
+        .filter(|p| {
+            fs::symlink_metadata(p)
+                .map(|m| m.file_type().is_dir())
+                .unwrap_or(false)
+        })
         .filter(|p| {
             p.file_name()
                 .and_then(|n| n.to_str())
@@ -211,6 +278,7 @@ fn effective_subdir_path(original: &Path, parent: &Path, dry_run: bool) -> PathB
 fn process_dir(dir: &Path, config: &Config, counters: &mut Counters) {
     if config.verbose {
         println!("Directory: {}\n", dir.display());
+        warn_invalid_utf8_entries(dir);
     }
 
     // Snapshot subdirs BEFORE any rename so we can resolve their new paths later.
