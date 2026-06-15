@@ -246,11 +246,7 @@ fn collect_subdirs(dir: &Path) -> Vec<PathBuf> {
     read_dir
         .filter_map(Result::ok)
         .map(|e| e.path())
-        .filter(|p| {
-            fs::symlink_metadata(p)
-                .map(|m| m.file_type().is_dir())
-                .unwrap_or(false)
-        })
+        .filter(|p| fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_dir()))
         .filter(|p| {
             p.file_name()
                 .and_then(|n| n.to_str())
