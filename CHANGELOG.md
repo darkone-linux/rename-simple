@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-15
+
+### Added
+- Public `transform_dirname` function: directories have no extension, so a dot
+  in their name is treated as a plain separator and the whole name goes through
+  the slug pipeline (e.g. `My Project.v2` → `my-project-v2`, where the old
+  extension-aware path produced `my-project.v2`).
+
+### Fixed
+- **Recursion into the wrong sibling on a name conflict**: when a directory
+  rename is blocked because a sibling already holds the target name, `-r` now
+  descends into the blocked directory under its original (unchanged) name
+  instead of the pre-existing sibling. Recursion follows the renames actually
+  applied to disk rather than recomputing the destination and probing the
+  filesystem. Closes the documented limitation in the README.
+
+### Changed
+- Directory names are now slugified via `transform_dirname` instead of
+  `transform_filename`, so a dot in a directory name no longer survives as a
+  spurious `.ext` suffix.
+
+### Dependencies
+- Updated `rustix` 0.38 → 1; refreshed compatible lockfile entries. The Linux
+  dependency tree shrank from 95 to 83 crates (no more `windows-sys`,
+  deduplicated with `tempfile`).
+
 ## [0.2.4] - 2026-05-19
 
 ### Security
