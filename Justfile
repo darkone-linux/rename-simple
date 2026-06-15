@@ -70,9 +70,9 @@ man:
 
 # ─── Release / packaging ───────────────────────────────────────────────────
 
-# Check that the project is clean (tests pass, git is not dirty)
+# Check that the working tree is clean (no uncommitted or untracked files).
+# Testing is the job of `just test` / `just unit`, not of this guard.
 _check_is_clean:
-    cargo test -q
     if [ -n "$(git status --porcelain)" ]; then \
         echo "The project is not clean: working tree has uncommitted or untracked files." >&2; \
         exit 1; \
@@ -97,7 +97,7 @@ bump level="patch":
     echo "Version bumped: ${current} → ${new}"
     echo "Next step: update CHANGELOG.md, then run: just release"
 
-# Full release: test → commit → tag → push → package → GitHub Release → cargo publish
+# Full release: test → commit → tag → package → push → GitHub Release → cargo publish
 [group('packaging')]
 release:
     #!/usr/bin/env bash
@@ -124,11 +124,13 @@ release:
         git tag -a "$tag" -m "Release ${tag}"
     fi
 
+    # Build packages (binary, .deb, …) BEFORE anything leaves the machine, so a
+    # packaging failure stays local and fully recoverable — nothing has been
+    # pushed or published yet at this point.
+    just package all
+
     # Push branch + tags (idempotent: no-op when already up-to-date)
     git push origin main --follow-tags
-
-    # Build binary and .deb for GitHub release assets
-    just package all
 
     # GitHub Release — skip if already exists; upload assets idempotently
     if gh release view "$tag" >/dev/null 2>&1; then
