@@ -26,7 +26,7 @@ unicode-normalization = "0.1"
 # destination, closing the TOCTOU window between `op.to.exists()` and
 # `fs::rename`. macOS/BSD fall back to a pre-check + std::fs::rename.
 [target.'cfg(target_os = "linux")'.dependencies]
-rustix = { version = "0.38", features = ["fs"] }
+rustix = { version = "1", features = ["fs"] }
 
 [dev-dependencies]
 assert_cmd = "2"
