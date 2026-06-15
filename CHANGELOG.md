@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-06-15
+
+### Fixed
+- Replaced a `map(...).unwrap_or(false)` on a `Result` in `collect_subdirs`
+  with `is_ok_and(...)`: newer clippy flags the former under
+  `clippy::map_unwrap_or`, which broke CI even though the code was correct.
+- `just release` now sends a `User-Agent` header when querying the crates.io
+  API to detect an already-published version. crates.io answers `403` to
+  requests without one, so the guard always fell through to `cargo publish`
+  and errored on an existing version instead of skipping cleanly. The release
+  recipe is idempotent again.
+
+### Changed
+- `shell.nix` now pins `nixpkgs` to an exact revision instead of the ambient
+  `<nixpkgs>` channel, so local dev shells and CI resolve the same toolchain
+  (cargo, clippy, rustfmt). This prevents clippy-version drift from surfacing
+  lints in CI that `just test` could not see locally.
+
 ## [0.3.0] - 2026-06-15
 
 ### Added
