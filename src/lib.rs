@@ -234,6 +234,27 @@ pub fn transform_filename(filename: &str) -> String {
     format!("{new_stem}{ext}")
 }
 
+/// Transform a **directory** name into a clean ASCII slug.
+///
+/// Unlike `transform_filename`, directories have no notion of an extension:
+/// a dot is just a regular character, so the whole name goes through
+/// `transform_stem` (e.g. `My Project.v2` → `my-project-v2`, not
+/// `my-project.v2`). Hidden entries (names starting with `.`) are returned
+/// unchanged. An entry that transliterates to nothing becomes `unnamed`.
+#[must_use]
+pub fn transform_dirname(name: &str) -> String {
+    // Leave hidden directories alone
+    if name.starts_with('.') {
+        return name.to_owned();
+    }
+
+    let new_name = transform_stem(name);
+    if new_name.is_empty() {
+        return "unnamed".to_owned();
+    }
+    new_name
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Filesystem operations
 // ─────────────────────────────────────────────────────────────────────────────
@@ -290,9 +311,14 @@ pub fn compute_renames(dir: &Path, target: RenameTarget) -> Result<Vec<RenameOp>
             continue;
         }
 
-        // Directories have no extension: transform_filename degrades to
-        // transform_stem cleanly when there is no dot in the name.
-        let renamed = transform_filename(&original);
+        // Directories have no extension, so a dot in their name is a plain
+        // separator: route them through transform_dirname, files through the
+        // extension-aware transform_filename.
+        let renamed = if is_dir {
+            transform_dirname(&original)
+        } else {
+            transform_filename(&original)
+        };
 
         if renamed == original {
             continue; // nothing to do

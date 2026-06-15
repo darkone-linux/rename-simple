@@ -1,4 +1,4 @@
-use rename_files::{transform_filename, transform_stem, transliterate_char};
+use rename_files::{transform_dirname, transform_filename, transform_stem, transliterate_char};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // transliterate_char
@@ -823,5 +823,56 @@ mod transform_filename_tests {
         assert_ne!(nfc, nfd.as_str(), "test fixture must actually differ");
         assert_eq!(transform_stem(nfc), "cafe_resume_eleve");
         assert_eq!(transform_stem(&nfd), transform_stem(nfc));
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// transform_dirname
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod transform_dirname_tests {
+    use super::*;
+
+    // Directories have no extension: a dot in the name is just a regular
+    // separator and must be transliterated like any other character, not
+    // preserved as a trailing ".ext".
+    #[test]
+    fn dot_in_dirname_is_not_treated_as_extension() {
+        assert_eq!(transform_dirname("My Project.v2"), "my-project-v2");
+        assert_eq!(
+            transform_dirname("archive.2024.backup"),
+            "archive-2024-backup"
+        );
+    }
+
+    #[test]
+    fn dirname_looking_like_a_file_keeps_no_extension() {
+        // Would be "notes.txt" under transform_filename, but a directory
+        // named "notes.txt" must become "notes-txt".
+        assert_eq!(transform_dirname("notes.txt"), "notes-txt");
+        assert_eq!(
+            transform_dirname("Mon Dossier.tar.gz"),
+            "mon-dossier-tar-gz"
+        );
+    }
+
+    #[test]
+    fn plain_dirname_is_slugified() {
+        assert_eq!(transform_dirname("Mon Dossier"), "mon-dossier");
+        assert_eq!(transform_dirname("Données 2024"), "donnees-2024");
+        assert_eq!(transform_dirname("Réunion d'équipe"), "reunion-d-equipe");
+    }
+
+    #[test]
+    fn hidden_dirname_is_not_modified() {
+        assert_eq!(transform_dirname(".git"), ".git");
+        assert_eq!(transform_dirname(".config"), ".config");
+    }
+
+    #[test]
+    fn empty_after_transform_returns_unnamed() {
+        assert_eq!(transform_dirname("!!!---!!!"), "unnamed");
+        assert_eq!(transform_dirname("   "), "unnamed");
     }
 }
