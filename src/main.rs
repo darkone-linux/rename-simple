@@ -1,5 +1,5 @@
 use clap::{CommandFactory, Parser};
-use rename_files::{compute_renames, transform_filename, RenameOp, RenameTarget};
+use rename_files::{compute_renames, RenameOp, RenameTarget};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -172,8 +172,17 @@ fn rename_no_clobber(from: &Path, to: &Path) -> std::io::Result<()> {
 }
 
 /// Apply a list of rename operations, printing each result.
-/// Updates `counters` in place.
-fn apply_ops(ops: &[RenameOp], dry_run: bool, verbose: bool, counters: &mut Counters) {
+/// Updates `counters` in place and returns the ops that were actually applied
+/// to disk (empty in dry-run), so the caller can map each original path to its
+/// real new location for recursion — instead of recomputing and probing the
+/// filesystem, which is ambiguous when a sibling already holds the target name.
+fn apply_ops(
+    ops: &[RenameOp],
+    dry_run: bool,
+    verbose: bool,
+    counters: &mut Counters,
+) -> Vec<RenameOp> {
+    let mut applied = Vec::new();
     for op in ops {
         let from_name = display_name(&op.from);
         let to_name = display_name(&op.to);
@@ -190,6 +199,7 @@ fn apply_ops(ops: &[RenameOp], dry_run: bool, verbose: bool, counters: &mut Coun
                         println!("  {from_name} → {to_name}");
                     }
                     counters.renamed += 1;
+                    applied.push(op.clone());
                 }
                 Err(e) => {
                     eprintln!("  ✗ Error renaming '{from_name}': {e}");
@@ -198,6 +208,7 @@ fn apply_ops(ops: &[RenameOp], dry_run: bool, verbose: bool, counters: &mut Coun
             }
         }
     }
+    applied
 }
 
 /// Warn about entries whose filename is not valid UTF-8.
@@ -253,21 +264,22 @@ fn collect_subdirs(dir: &Path) -> Vec<PathBuf> {
 ///
 /// - In dry-run mode the filesystem was not modified, so the original path is
 ///   always valid.
-/// - Otherwise, compute the expected new name; return it if it exists on disk,
-///   fall back to the original if the rename was skipped (conflict, error…).
-fn effective_subdir_path(original: &Path, parent: &Path, dry_run: bool) -> PathBuf {
+/// - Otherwise, look the original path up in the set of renames that were
+///   actually applied. A directory whose rename was skipped (conflict, error…)
+///   is absent from the map and keeps its original path. This is unambiguous
+///   even when a sibling already holds the target name — unlike recomputing the
+///   destination name and probing the filesystem.
+fn effective_subdir_path(
+    original: &Path,
+    applied: &HashMap<&Path, &Path>,
+    dry_run: bool,
+) -> PathBuf {
     if dry_run {
         return original.to_owned();
     }
-    if let Some(name) = original.file_name().and_then(|n| n.to_str()) {
-        let new_name = transform_filename(name);
-        let candidate = parent.join(&new_name);
-        if candidate.is_dir() {
-            return candidate;
-        }
-    }
-    // Rename was skipped or failed — fall back to original path
-    original.to_owned()
+    applied
+        .get(original)
+        .map_or_else(|| original.to_owned(), |p| p.to_path_buf())
 }
 
 /// Process a single directory: rename its entries, then optionally recurse.
@@ -288,7 +300,9 @@ fn process_dir(dir: &Path, config: &Config, counters: &mut Counters) {
         Vec::new()
     };
 
-    // Compute and apply renames at this level.
+    // Compute and apply renames at this level, keeping the ops that actually
+    // landed on disk so recursion can follow each subdir to its real new path.
+    let mut applied = Vec::new();
     match compute_renames(dir, config.target) {
         Err(e) => {
             eprintln!("  ✗ Cannot read directory: {e}");
@@ -300,7 +314,7 @@ fn process_dir(dir: &Path, config: &Config, counters: &mut Counters) {
         }
         Ok(ops) => {
             let ops = filter_conflicts(ops);
-            apply_ops(&ops, config.dry_run, config.verbose, counters);
+            applied = apply_ops(&ops, config.dry_run, config.verbose, counters);
             if config.verbose {
                 println!();
             }
@@ -309,8 +323,12 @@ fn process_dir(dir: &Path, config: &Config, counters: &mut Counters) {
 
     // Recurse into subdirectories using their (potentially renamed) paths.
     if config.recursive {
+        let applied_map: HashMap<&Path, &Path> = applied
+            .iter()
+            .map(|op| (op.from.as_path(), op.to.as_path()))
+            .collect();
         for subdir in &subdirs {
-            let effective = effective_subdir_path(subdir, dir, config.dry_run);
+            let effective = effective_subdir_path(subdir, &applied_map, config.dry_run);
             if effective.is_dir() {
                 process_dir(&effective, config, counters);
             }

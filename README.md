@@ -135,38 +135,6 @@ rsa -n ~/Downloads       # dry-run preview
 cargo test
 ```
 
-## Known limitations (TODO)
-
-### Recursion can descend into the wrong sibling on a name conflict
-
-When two sibling directories collide after transformation, the rename is
-correctly skipped (no data is overwritten), but the recursive descent that
-follows uses the **destination name** to locate the renamed dir on disk.
-If the destination already exists as a different directory in the same
-parent, recursion enters that pre-existing directory instead of the
-original one.
-
-Concrete case:
-
-```
-parent/
-├── Cible/                 ← would rename to "cible" but blocked (conflict)
-│   └── fichier.txt        ← never visited
-└── cible/                 ← pre-existing, gets visited twice
-```
-
-`effective_subdir_path` in `src/main.rs` resolves both `Cible` and `cible`
-to `parent/cible`, so the file inside `Cible/` is silently skipped under
-`-r`. No data is lost, but recursion coverage is incomplete.
-
-**Workaround**: rename one of the conflicting directories manually before
-running `-r`, or run without `-r` first to surface the conflict, then
-re-run after resolving it.
-
-**Tracking**: see the audit notes from v0.2.4 — fix candidates include
-detecting the case explicitly in `effective_subdir_path` and falling back
-to the original path when the destination existed before the run.
-
 ## License
 
 MIT

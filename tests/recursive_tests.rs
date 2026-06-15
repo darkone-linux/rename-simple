@@ -236,6 +236,46 @@ fn test_recursive_descends_into_renamed_dir_not_original() {
 }
 
 #[test]
+fn test_recursive_sibling_conflict_descends_into_blocked_dir() {
+    // Regression for the documented "recursion descends into the wrong sibling
+    // on a name conflict" limitation.
+    //
+    //   parent/
+    //   ├── Cible/                 ← would rename to "cible" but blocked
+    //   │   └── Sous Fichier.txt   ← must still be visited inside Cible/
+    //   └── cible/                 ← pre-existing, must NOT be visited twice
+    //
+    // Recursion must follow the *actual* on-disk path of "Cible" (unchanged,
+    // because the rename was skipped), not the recomputed destination "cible".
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::create_dir(dir.join("Cible")).unwrap();
+    fs::write(dir.join("Cible/Sous Fichier.txt"), "x").unwrap();
+    fs::create_dir(dir.join("cible")).unwrap();
+    fs::write(dir.join("cible/Deja Propre.txt"), "y").unwrap();
+
+    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
+    assert!(output.status.success());
+
+    // The blocked directory still exists under its original name and its
+    // content was renamed in place.
+    assert!(dir.join("Cible").exists(), "conflicting dir must stay");
+    assert!(
+        dir.join("Cible/sous-fichier.txt").exists(),
+        "file inside the blocked dir must be renamed (recursion must visit it)"
+    );
+
+    // The pre-existing sibling is visited exactly once: its file is renamed,
+    // and Cible's content did not leak into it.
+    assert!(dir.join("cible/deja-propre.txt").exists());
+    assert!(
+        !dir.join("cible/sous-fichier.txt").exists(),
+        "blocked dir content must not be processed inside the wrong sibling"
+    );
+}
+
+#[test]
 fn test_recursive_processes_sibling_subdirs_independently() {
     // Two parallel subdirectories, each renamed and each containing a file
     // that must also be renamed inside the new parent path.
