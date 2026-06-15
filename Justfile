@@ -156,8 +156,12 @@ release:
         echo "GitHub release $tag created with artifacts."
     fi
 
-    # Publish to crates.io — skip if this version is already published
-    if curl -sf "https://crates.io/api/v1/crates/rename-simple/${v}" >/dev/null 2>&1; then
+    # Publish to crates.io — skip if this version is already published.
+    # crates.io rejects requests without a User-Agent (HTTP 403), so the guard
+    # must send one; otherwise it always falls through to `cargo publish`, which
+    # then errors on an already-published version instead of skipping cleanly.
+    ua="rename-simple-release (https://github.com/darkone-linux/rename-simple)"
+    if curl -sf -A "$ua" "https://crates.io/api/v1/crates/rename-simple/${v}" >/dev/null 2>&1; then
         echo "crates.io rename-simple ${v} already published — skipping."
     else
         cargo publish
