@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-06-30
+
+### Added
+- **Rename-like mode**: paths can now be passed explicitly on the command line
+  and each argument is renamed **itself** (not its contents), like the
+  traditional `rename`(1) command. Globbing is left to the shell, so
+  `rename-simple *.jpg` or `rename-simple dir/**/*.pdf` (with `globstar`) work
+  as expected. New public `plan_rename` function backs this mode.
+
+### Removed
+- **BREAKING — directory-scan mode**: `rename-simple` no longer reads the
+  current directory when invoked without paths; it operates only on the
+  arguments it is given. With no argument, it prints its help.
+- **BREAKING — `-a`/`--all` flag**: redundant now that both files and
+  directories are renamed by default. Use `rename-simple *` instead.
+- **BREAKING — `-r`/`--recursive` flag**: recursion is dropped. Use the shell's
+  recursive globbing (`rename-simple **/*.pdf`) to reach nested entries.
+- Public `compute_renames` function (the directory scanner) removed from the
+  library API.
+
+### Changed
+- `-f` / `-d` now act purely as a type filter on the explicit arguments.
+- README, man page and `AGENTS.md` updated for the rename-like model; the
+  shell-alias tip is now `alias rsa='rename-simple *'`.
+- Tests reworked around explicit paths; `tests/recursive_tests.rs` removed.
+
 ## [0.3.1] - 2026-06-15
 
 ### Fixed
