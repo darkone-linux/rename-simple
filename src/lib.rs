@@ -332,3 +332,54 @@ pub fn compute_renames(dir: &Path, target: RenameTarget) -> Result<Vec<RenameOp>
 
     Ok(ops)
 }
+
+/// Compute the rename for a single explicit entry — the entry **itself**, not
+/// its contents.
+///
+/// This is the counterpart of `compute_renames` for paths passed directly on
+/// the command line (the `rename`-like mode). Returns `None` when:
+/// - the entry is filtered out by `target` (e.g. a directory under `FilesOnly`);
+/// - the name is not valid UTF-8;
+/// - the transform is a no-op — the name is already clean, or it is a hidden
+///   file (`transform_filename` / `transform_dirname` leave dotfiles unchanged,
+///   so they naturally collapse to `None` here).
+///
+/// `is_file` / `is_dir` follow symlinks, matching `compute_renames`. The
+/// destination keeps the entry's parent directory and only swaps the basename.
+#[must_use]
+pub fn plan_rename(path: &Path, target: RenameTarget) -> Option<RenameOp> {
+    let is_file = path.is_file();
+    let is_dir = path.is_dir();
+
+    let include = match target {
+        RenameTarget::All => is_file || is_dir,
+        RenameTarget::FilesOnly => is_file,
+        RenameTarget::DirsOnly => is_dir,
+    };
+    if !include {
+        return None;
+    }
+
+    let original = path.file_name().and_then(|n| n.to_str())?;
+
+    // Directories have no extension (a dot is a plain separator), so route them
+    // through transform_dirname; files through the extension-aware transform.
+    let renamed = if is_dir {
+        transform_dirname(original)
+    } else {
+        transform_filename(original)
+    };
+
+    if renamed == original {
+        return None; // nothing to do (already clean or hidden file)
+    }
+
+    let to = path
+        .parent()
+        .unwrap_or_else(|| Path::new(""))
+        .join(&renamed);
+    Some(RenameOp {
+        from: path.to_path_buf(),
+        to,
+    })
+}

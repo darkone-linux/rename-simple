@@ -32,15 +32,22 @@ cargo install --path .
 ## Usage
 
 ```
-rename-simple [OPTIONS] [DIR]
+rename-simple [OPTIONS] [PATH]...
 ```
 
-You must specify one of `-f`, `-d`, or `-a` to select what to rename.
-Running `rename-simple` without any option prints this help.
+Each `PATH` is an entry renamed **itself**, like the traditional `rename`
+command — globbing is left to the shell (`rename-simple *.jpg`, or
+`rename-simple dir/**/*.pdf` with zsh / bash `globstar`). With explicit paths,
+files and directories are both renamed by default; `-f` / `-d` then act as a
+type filter.
+
+When **no** `PATH` is given, the entries of the current directory are processed
+(legacy behaviour); in that case you must specify one of `-f`, `-d`, or `-a`,
+otherwise `rename-simple` prints this help.
 
 | Option | Description |
 |---|---|
-| `DIR` | Directory to process (default: current directory) |
+| `PATH...` | Entries to rename (default: entries of the current directory) |
 | `-f` | Rename files only |
 | `-d` | Rename directories only |
 | `-a`, `--all` | Rename both files and directories |
@@ -55,7 +62,7 @@ Running `rename-simple` without any option prints this help.
 ### Preview all renames (dry-run)
 
 ```bash
-$ rename-simple -a --dry-run ~/Downloads
+$ rename-simple -a --dry-run ~/Downloads/*
 ```
 
 ```
@@ -70,7 +77,7 @@ $ rename-simple -a --dry-run ~/Downloads
 ### Rename files only
 
 ```bash
-$ rename-simple -f ~/Downloads
+$ rename-simple -f ~/Downloads/*
 ```
 
 Directories are left untouched; only files are renamed.
@@ -78,7 +85,7 @@ Directories are left untouched; only files are renamed.
 ### Rename directories only
 
 ```bash
-$ rename-simple -d ~/Projects
+$ rename-simple -d ~/Projects/*
 ```
 
 Files are left untouched; only directories are renamed.
@@ -86,21 +93,25 @@ Files are left untouched; only directories are renamed.
 ### Rename everything
 
 ```bash
-$ rename-simple -a ~/Downloads
+$ rename-simple -a ~/Downloads/*
 ```
 
 ### Recursive processing
 
 ```bash
-$ rename-simple -a --recursive ~/Documents
+$ rename-simple -a --recursive ~/Documents/*
 ```
 
-Renames files and directories at every level of the tree.
+Renames files and directories at every level of the tree. With a shell that
+supports recursive globs you can also select by pattern, e.g.
+`rename-simple ~/Documents/**/*.pdf`.
 
 ### Verbose output
 
+The current-directory form (no path argument) prints a directory header:
+
 ```bash
-$ rename-simple -a -v ~/Downloads
+$ cd ~/Downloads && rename-simple -a -v
 ```
 
 ```

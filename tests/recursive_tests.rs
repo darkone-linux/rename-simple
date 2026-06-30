@@ -17,7 +17,7 @@ fn test_recursive_processes_nested_files() {
     fs::create_dir(dir.join("Sous-dossier")).unwrap();
     fs::write(dir.join("Sous-dossier/Fichier Test.txt"), "content").unwrap();
 
-    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-r").current_dir(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("sous-dossier/fichier-test.txt").exists());
@@ -35,7 +35,7 @@ fn test_recursive_processes_deeply_nested_files() {
     )
     .unwrap();
 
-    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-r").current_dir(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir
@@ -51,7 +51,7 @@ fn test_recursive_renames_nested_directories() {
     fs::create_dir_all(dir.join("Sous-dossier/Sous-sous-dossier")).unwrap();
     fs::write(dir.join("test.txt"), "content").unwrap();
 
-    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-r").current_dir(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("sous-dossier/sous-sous-dossier").exists());
@@ -70,7 +70,7 @@ fn test_recursive_with_dry_run_no_actual_rename() {
         .arg("-a")
         .arg("-r")
         .arg("-n")
-        .arg(dir)
+        .current_dir(dir)
         .output()
         .unwrap();
 
@@ -92,7 +92,7 @@ fn test_recursive_files_only_with_f_and_r() {
     fs::write(dir.join("Répertoire/Fichier.txt"), "content").unwrap();
     fs::write(dir.join("Fichier.txt"), "content").unwrap();
 
-    let output = cmd().arg("-f").arg("-r").arg(dir).output().unwrap();
+    let output = cmd().arg("-f").arg("-r").current_dir(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("fichier.txt").exists());
@@ -108,7 +108,7 @@ fn test_recursive_dirs_only_with_d_and_r() {
     fs::create_dir(dir.join("Sous-dossier")).unwrap();
     fs::write(dir.join("Fichier.txt"), "content").unwrap();
 
-    let output = cmd().arg("-d").arg("-r").arg(dir).output().unwrap();
+    let output = cmd().arg("-d").arg("-r").current_dir(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("repertoire").exists());
@@ -129,7 +129,7 @@ fn test_non_recursive_renames_root_only() {
         .arg("-a")
         .arg("-n")
         .arg("-v")
-        .arg(dir)
+        .current_dir(dir)
         .output()
         .unwrap();
 
@@ -154,7 +154,7 @@ fn test_recursive_handles_multiple_subdirs() {
         .arg("-r")
         .arg("-n")
         .arg("-v")
-        .arg(dir)
+        .current_dir(dir)
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -174,7 +174,7 @@ fn test_recursive_with_hidden_subdirs_skipped() {
     fs::create_dir(dir.join(".hidden")).unwrap();
     fs::write(dir.join("visible.txt"), "content").unwrap();
 
-    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-r").current_dir(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join(".hidden").exists());
@@ -201,7 +201,7 @@ fn test_recursive_deep_nesting_terminates() {
     let output = cmd()
         .arg("-a")
         .arg("-r")
-        .arg(temp_dir.path())
+        .current_dir(temp_dir.path())
         .output()
         .unwrap();
     assert!(output.status.success(), "must not crash at depth {depth}");
@@ -225,7 +225,7 @@ fn test_recursive_descends_into_renamed_dir_not_original() {
     fs::create_dir(dir.join("Mon Dossier")).unwrap();
     fs::write(dir.join("Mon Dossier/Fichier Interne.txt"), "x").unwrap();
 
-    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-r").current_dir(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(!dir.join("Mon Dossier").exists(), "parent must be renamed");
@@ -255,7 +255,7 @@ fn test_recursive_sibling_conflict_descends_into_blocked_dir() {
     fs::create_dir(dir.join("cible")).unwrap();
     fs::write(dir.join("cible/Deja Propre.txt"), "y").unwrap();
 
-    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-r").current_dir(dir).output().unwrap();
     assert!(output.status.success());
 
     // The blocked directory still exists under its original name and its
@@ -287,9 +287,68 @@ fn test_recursive_processes_sibling_subdirs_independently() {
     fs::write(dir.join("Alpha Bêta/Un Fichier.txt"), "a").unwrap();
     fs::write(dir.join("Gamma Delta/Autre Fichier.txt"), "g").unwrap();
 
-    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-r").current_dir(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("alpha-beta/un-fichier.txt").exists());
     assert!(dir.join("gamma-delta/autre-fichier.txt").exists());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Explicit directory target with -r (`rename`-like mode): rename + descend
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_explicit_dir_target_with_r_renames_and_descends() {
+    // `rename-simple -r DIR` (DIR as an explicit argument) renames the directory
+    // itself AND recursively cleans its contents.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::create_dir(dir.join("Mon Dossier")).unwrap();
+    fs::create_dir(dir.join("Mon Dossier/Sous Dossier")).unwrap();
+    fs::write(dir.join("Mon Dossier/Fichier A.txt"), "a").unwrap();
+    fs::write(dir.join("Mon Dossier/Sous Dossier/Fichier B.txt"), "b").unwrap();
+
+    let output = cmd()
+        .arg("-a")
+        .arg("-r")
+        .arg(dir.join("Mon Dossier"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(
+        !dir.join("Mon Dossier").exists(),
+        "target dir must be renamed"
+    );
+    assert!(dir.join("mon-dossier/fichier-a.txt").exists());
+    assert!(dir.join("mon-dossier/sous-dossier/fichier-b.txt").exists());
+}
+
+#[test]
+fn test_explicit_dir_target_without_r_renames_self_only() {
+    // Without -r, an explicit directory target is renamed but its contents are
+    // left untouched.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::create_dir(dir.join("Mon Dossier")).unwrap();
+    fs::write(dir.join("Mon Dossier/Fichier A.txt"), "a").unwrap();
+
+    let output = cmd()
+        .arg("-a")
+        .arg(dir.join("Mon Dossier"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(
+        dir.join("mon-dossier").exists(),
+        "target dir must be renamed"
+    );
+    assert!(
+        dir.join("mon-dossier/Fichier A.txt").exists(),
+        "contents must be untouched without -r"
+    );
 }

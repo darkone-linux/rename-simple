@@ -1,5 +1,5 @@
 use clap::{CommandFactory, Parser};
-use rename_files::{compute_renames, RenameOp, RenameTarget};
+use rename_files::{compute_renames, plan_rename, RenameOp, RenameTarget};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -58,21 +58,35 @@ struct Cli {
     #[arg(short = 'n', long = "dry-run")]
     dry_run: bool,
 
-    /// Target directory (default: current directory)
-    dir: Option<PathBuf>,
+    /// Entries to rename (files and/or directories). When omitted, the entries
+    /// of the current directory are processed (legacy behaviour).
+    paths: Vec<PathBuf>,
+}
+
+/// What the program operates on.
+enum Mode {
+    /// No explicit path given: rename the entries **inside** this directory
+    /// (legacy behaviour, default: current directory).
+    Scan(PathBuf),
+    /// Explicit paths given: rename each listed entry **itself**
+    /// (the `rename`-like mode).
+    Targets(Vec<PathBuf>),
 }
 
 struct Config {
-    dir: PathBuf,
+    mode: Mode,
     dry_run: bool,
     recursive: bool,
     target: RenameTarget,
     verbose: bool,
 }
 
-/// Convert the parsed `Cli` into the runtime `Config`, performing the only
-/// validation `clap` cannot express declaratively: that the target path is an
-/// existing directory.
+/// Convert the parsed `Cli` into the runtime `Config`.
+///
+/// With explicit paths we enter `Targets` mode; per-path validation (existence)
+/// happens at apply time, so a single bad path does not abort the whole batch.
+/// Without paths we fall back to `Scan` mode and validate that the directory
+/// (default: current) exists — the only check `clap` cannot express.
 fn build_config(cli: Cli) -> Result<Config, String> {
     let target = if cli.files_only {
         RenameTarget::FilesOnly
@@ -82,17 +96,19 @@ fn build_config(cli: Cli) -> Result<Config, String> {
         RenameTarget::All
     };
 
-    let dir = cli.dir.map_or_else(
-        || env::current_dir().map_err(|e| format!("Cannot determine current directory: {e}")),
-        Ok,
-    )?;
-
-    if !dir.is_dir() {
-        return Err(format!("'{}' is not a directory.", dir.display()));
-    }
+    let mode = if cli.paths.is_empty() {
+        let dir =
+            env::current_dir().map_err(|e| format!("Cannot determine current directory: {e}"))?;
+        if !dir.is_dir() {
+            return Err(format!("'{}' is not a directory.", dir.display()));
+        }
+        Mode::Scan(dir)
+    } else {
+        Mode::Targets(cli.paths)
+    };
 
     Ok(Config {
-        dir,
+        mode,
         dry_run: cli.dry_run,
         recursive: cli.recursive,
         target,
@@ -332,6 +348,54 @@ fn process_dir(dir: &Path, config: &Config, counters: &mut Counters) {
     }
 }
 
+/// Rename a list of explicitly-named entries (the `rename`-like mode).
+///
+/// Each path is renamed **itself** (not its contents). Missing paths are
+/// reported and counted as errors but do not abort the batch. Destination
+/// conflicts across the whole batch are detected together via `filter_conflicts`.
+///
+/// When `config.recursive` is set, every path that is a directory is — after
+/// its own rename — descended into with `process_dir`, so its contents are
+/// cleaned recursively too. Directory paths are snapshotted **before** any
+/// rename, then resolved to their post-rename location via `effective_subdir_path`.
+fn process_targets(paths: &[PathBuf], config: &Config, counters: &mut Counters) {
+    // Snapshot directory arguments BEFORE renaming, so `-r` can follow each to
+    // its real new path afterwards (the original path may no longer exist).
+    let dir_paths: Vec<PathBuf> = if config.recursive {
+        paths.iter().filter(|p| p.is_dir()).cloned().collect()
+    } else {
+        Vec::new()
+    };
+
+    let mut ops = Vec::new();
+    for path in paths {
+        if !path.exists() {
+            eprintln!("  ✗ Error: '{}' does not exist", path.display());
+            counters.errors += 1;
+            continue;
+        }
+        if let Some(op) = plan_rename(path, config.target) {
+            ops.push(op);
+        }
+    }
+
+    let ops = filter_conflicts(ops);
+    let applied = apply_ops(&ops, config.dry_run, config.verbose, counters);
+
+    if config.recursive {
+        let applied_map: HashMap<&Path, &Path> = applied
+            .iter()
+            .map(|op| (op.from.as_path(), op.to.as_path()))
+            .collect();
+        for dir in &dir_paths {
+            let effective = effective_subdir_path(dir, &applied_map, config.dry_run);
+            if effective.is_dir() {
+                process_dir(&effective, config, counters);
+            }
+        }
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // main
 // ─────────────────────────────────────────────────────────────────────────────
@@ -342,8 +406,10 @@ fn main() {
     // syntactically valid command line.
     let cli = Cli::parse();
 
-    // Without a target-mode flag (-f, -d, or -a), show help just like -h.
-    if !cli.files_only && !cli.dirs_only && !cli.all {
+    // Without a target-mode flag (-f, -d, or -a) AND without explicit paths,
+    // there is nothing to disambiguate the bare invocation: show help like -h.
+    // With explicit paths, the absence of a flag simply means "rename them all".
+    if cli.paths.is_empty() && !cli.files_only && !cli.dirs_only && !cli.all {
         Cli::command().print_help().unwrap_or(());
         process::exit(0);
     }
@@ -366,7 +432,10 @@ fn main() {
         errors: 0,
     };
 
-    process_dir(&config.dir, &config, &mut counters);
+    match &config.mode {
+        Mode::Scan(dir) => process_dir(dir, &config, &mut counters),
+        Mode::Targets(paths) => process_targets(paths, &config, &mut counters),
+    }
 
     if config.verbose {
         let label = if config.dry_run {

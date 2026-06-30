@@ -21,7 +21,7 @@ fn test_symlink_to_file_renames_link_not_target() {
     fs::write(dir.join("target.txt"), "TARGET CONTENT").unwrap();
     std::os::unix::fs::symlink("target.txt", dir.join("Lien Étrange.txt")).unwrap();
 
-    let output = cmd().arg("-a").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").current_dir(dir).output().unwrap();
 
     assert!(output.status.success());
 
@@ -62,7 +62,7 @@ fn test_dangling_symlink_is_left_alone() {
     std::os::unix::fs::symlink("does-not-exist", dir.join("Dangling Link.txt")).unwrap();
     fs::write(dir.join("Real File.txt"), "x").unwrap();
 
-    let output = cmd().arg("-a").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").current_dir(dir).output().unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("real-file.txt").exists());
@@ -119,7 +119,7 @@ fn test_recursive_symlink_loop_terminates() {
 
     fs::write(dir.join("Real File.txt"), "x").unwrap();
 
-    let output = cmd().arg("-a").arg("-r").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-r").current_dir(dir).output().unwrap();
 
     assert!(output.status.success(), "must terminate without panic");
     assert!(dir.join("real-file.txt").exists());
@@ -154,7 +154,7 @@ fn test_readonly_parent_yields_error_without_panic() {
         return;
     }
 
-    let output = cmd().arg("-a").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").current_dir(dir).output().unwrap();
 
     // Restore writable perms BEFORE the temp dir tries to drop itself,
     // otherwise tempfile cannot clean up.
@@ -189,7 +189,7 @@ fn test_invalid_utf8_filename_reports_warning_in_verbose() {
     fs::write(dir.join(bad_name), "x").unwrap();
     fs::write(dir.join("Bon Fichier.txt"), "y").unwrap();
 
-    let output = cmd().arg("-a").arg("-v").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").arg("-v").current_dir(dir).output().unwrap();
 
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -215,7 +215,7 @@ fn test_invalid_utf8_filename_does_not_panic() {
     // Add a normal file alongside so we can confirm it still gets renamed.
     fs::write(dir.join("Bon Fichier.txt"), "y").unwrap();
 
-    let output = cmd().arg("-a").arg(dir).output().unwrap();
+    let output = cmd().arg("-a").current_dir(dir).output().unwrap();
 
     assert!(output.status.success(), "must not crash on invalid UTF-8");
     assert!(
