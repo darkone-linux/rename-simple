@@ -1,9 +1,9 @@
 use clap::{CommandFactory, Parser};
-use rename_files::{compute_renames, plan_rename, RenameOp, RenameTarget};
+use rename_files::{plan_rename, RenameOp, RenameTarget};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::{env, fs, process};
+use std::process;
 
 /// Lossy display name for a path, with a stable fallback when `file_name()`
 /// is `None` (e.g. a path ending in `..`). Avoids the panicky `unwrap()` on
@@ -19,8 +19,8 @@ fn display_name(path: &Path) -> Cow<'_, str> {
 
 /// Command-line interface, parsed by `clap`.
 ///
-/// Mutual exclusion between `-f`, `-d`, and `-a` is enforced by
-/// `conflicts_with_all`, so clap rejects invalid combinations at parse time.
+/// Mutual exclusion between `-f` and `-d` is enforced by `conflicts_with`, so
+/// clap rejects invalid combinations at parse time.
 #[derive(Parser, Debug)]
 #[command(
     name = "rename-simple",
@@ -29,26 +29,17 @@ fn display_name(path: &Path) -> Cow<'_, str> {
              special chars to clean ASCII slugs",
     long_about = None,
 )]
-// Six independent flags is normal for a CLI; refactoring into a state
-// enum would obscure the clap derive layout without simplifying the call
-// sites.
+// Four independent flags is normal for a CLI; refactoring into a state enum
+// would obscure the clap derive layout without simplifying the call sites.
 #[allow(clippy::struct_excessive_bools)]
 struct Cli {
     /// Rename files only
-    #[arg(short = 'f', conflicts_with_all = ["dirs_only", "all"])]
+    #[arg(short = 'f', conflicts_with = "dirs_only")]
     files_only: bool,
 
     /// Rename directories only
-    #[arg(short = 'd', conflicts_with_all = ["files_only", "all"])]
+    #[arg(short = 'd', conflicts_with = "files_only")]
     dirs_only: bool,
-
-    /// Rename both files and directories
-    #[arg(short = 'a', long, conflicts_with_all = ["files_only", "dirs_only"])]
-    all: bool,
-
-    /// Process subdirectories recursively
-    #[arg(short, long)]
-    recursive: bool,
 
     /// Show details of what is being renamed
     #[arg(short, long)]
@@ -58,62 +49,29 @@ struct Cli {
     #[arg(short = 'n', long = "dry-run")]
     dry_run: bool,
 
-    /// Entries to rename (files and/or directories). When omitted, the entries
-    /// of the current directory are processed (legacy behaviour).
+    /// Entries to rename (files and/or directories). Each one is renamed
+    /// itself, like the traditional `rename`(1) command. Globbing is left to
+    /// the shell.
+    #[arg(value_name = "files")]
     paths: Vec<PathBuf>,
 }
 
-/// What the program operates on.
-enum Mode {
-    /// No explicit path given: rename the entries **inside** this directory
-    /// (legacy behaviour, default: current directory).
-    Scan(PathBuf),
-    /// Explicit paths given: rename each listed entry **itself**
-    /// (the `rename`-like mode).
-    Targets(Vec<PathBuf>),
-}
-
 struct Config {
-    mode: Mode,
     dry_run: bool,
-    recursive: bool,
     target: RenameTarget,
     verbose: bool,
 }
 
-/// Convert the parsed `Cli` into the runtime `Config`.
-///
-/// With explicit paths we enter `Targets` mode; per-path validation (existence)
-/// happens at apply time, so a single bad path does not abort the whole batch.
-/// Without paths we fall back to `Scan` mode and validate that the directory
-/// (default: current) exists — the only check `clap` cannot express.
-fn build_config(cli: Cli) -> Result<Config, String> {
-    let target = if cli.files_only {
+/// Select what kind of entries to rename from the parsed flags. Without `-f`
+/// or `-d` both files and directories are renamed.
+fn target_from(cli: &Cli) -> RenameTarget {
+    if cli.files_only {
         RenameTarget::FilesOnly
     } else if cli.dirs_only {
         RenameTarget::DirsOnly
     } else {
         RenameTarget::All
-    };
-
-    let mode = if cli.paths.is_empty() {
-        let dir =
-            env::current_dir().map_err(|e| format!("Cannot determine current directory: {e}"))?;
-        if !dir.is_dir() {
-            return Err(format!("'{}' is not a directory.", dir.display()));
-        }
-        Mode::Scan(dir)
-    } else {
-        Mode::Targets(cli.paths)
-    };
-
-    Ok(Config {
-        mode,
-        dry_run: cli.dry_run,
-        recursive: cli.recursive,
-        target,
-        verbose: cli.verbose,
-    })
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -150,10 +108,10 @@ fn filter_conflicts(ops: Vec<RenameOp>) -> Vec<RenameOp> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Directory processing
+// Renaming
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Counters accumulated across all levels of recursion.
+/// Counters accumulated across the whole batch.
 struct Counters {
     renamed: usize,
     errors: usize,
@@ -183,22 +141,13 @@ fn rename_no_clobber(from: &Path, to: &Path) -> std::io::Result<()> {
                 "destination exists",
             ));
         }
-        fs::rename(from, to)
+        std::fs::rename(from, to)
     }
 }
 
 /// Apply a list of rename operations, printing each result.
-/// Updates `counters` in place and returns the ops that were actually applied
-/// to disk (empty in dry-run), so the caller can map each original path to its
-/// real new location for recursion — instead of recomputing and probing the
-/// filesystem, which is ambiguous when a sibling already holds the target name.
-fn apply_ops(
-    ops: &[RenameOp],
-    dry_run: bool,
-    verbose: bool,
-    counters: &mut Counters,
-) -> Vec<RenameOp> {
-    let mut applied = Vec::new();
+/// Updates `counters` in place.
+fn apply_ops(ops: &[RenameOp], dry_run: bool, verbose: bool, counters: &mut Counters) {
     for op in ops {
         let from_name = display_name(&op.from);
         let to_name = display_name(&op.to);
@@ -215,134 +164,11 @@ fn apply_ops(
                         println!("  {from_name} → {to_name}");
                     }
                     counters.renamed += 1;
-                    applied.push(op.clone());
                 }
                 Err(e) => {
                     eprintln!("  ✗ Error renaming '{from_name}': {e}");
                     counters.errors += 1;
                 }
-            }
-        }
-    }
-    applied
-}
-
-/// Warn about entries whose filename is not valid UTF-8.
-///
-/// `compute_renames` skips these silently (it cannot transliterate bytes
-/// it cannot decode). In verbose mode we want the user to know which
-/// entries were ignored, otherwise a non-UTF-8 filename simply vanishes
-/// from the report.
-fn warn_invalid_utf8_entries(dir: &Path) {
-    let Ok(read_dir) = fs::read_dir(dir) else {
-        return;
-    };
-    for entry in read_dir.flatten() {
-        let name = entry.file_name();
-        if name.to_str().is_none() {
-            eprintln!(
-                "  ⚠  Skipping entry with invalid UTF-8 name: '{}'",
-                name.to_string_lossy()
-            );
-        }
-    }
-}
-
-/// Collect non-hidden subdirectories inside `dir`.
-/// Called BEFORE applying renames so we capture the original paths.
-///
-/// Symlinks pointing at directories are intentionally **not** followed:
-/// `symlink_metadata` returns the link's own metadata, so its file type is
-/// `Symlink`, not `Dir`. This prevents `-r` from escaping the target tree
-/// or looping on cyclic links.
-fn collect_subdirs(dir: &Path) -> Vec<PathBuf> {
-    let Ok(read_dir) = fs::read_dir(dir) else {
-        return Vec::new();
-    };
-    read_dir
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .filter(|p| fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_dir()))
-        .filter(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| !n.starts_with('.'))
-        })
-        .collect()
-}
-
-/// Resolve the effective path of a subdirectory after the parent level has
-/// been processed.
-///
-/// - In dry-run mode the filesystem was not modified, so the original path is
-///   always valid.
-/// - Otherwise, look the original path up in the set of renames that were
-///   actually applied. A directory whose rename was skipped (conflict, error…)
-///   is absent from the map and keeps its original path. This is unambiguous
-///   even when a sibling already holds the target name — unlike recomputing the
-///   destination name and probing the filesystem.
-fn effective_subdir_path(
-    original: &Path,
-    applied: &HashMap<&Path, &Path>,
-    dry_run: bool,
-) -> PathBuf {
-    if dry_run {
-        return original.to_owned();
-    }
-    applied
-        .get(original)
-        .map_or_else(|| original.to_owned(), |p| p.to_path_buf())
-}
-
-/// Process a single directory: rename its entries, then optionally recurse.
-///
-/// The function prints a header for the directory, applies (or simulates) all
-/// renames, and — when `config.recursive` is true — descends into every
-/// subdirectory using its post-rename path.
-fn process_dir(dir: &Path, config: &Config, counters: &mut Counters) {
-    if config.verbose {
-        println!("Directory: {}\n", dir.display());
-        warn_invalid_utf8_entries(dir);
-    }
-
-    // Snapshot subdirs BEFORE any rename so we can resolve their new paths later.
-    let subdirs = if config.recursive {
-        collect_subdirs(dir)
-    } else {
-        Vec::new()
-    };
-
-    // Compute and apply renames at this level, keeping the ops that actually
-    // landed on disk so recursion can follow each subdir to its real new path.
-    let mut applied = Vec::new();
-    match compute_renames(dir, config.target) {
-        Err(e) => {
-            eprintln!("  ✗ Cannot read directory: {e}");
-        }
-        Ok(ops) if ops.is_empty() => {
-            if config.verbose {
-                println!("  (nothing to rename)\n");
-            }
-        }
-        Ok(ops) => {
-            let ops = filter_conflicts(ops);
-            applied = apply_ops(&ops, config.dry_run, config.verbose, counters);
-            if config.verbose {
-                println!();
-            }
-        }
-    }
-
-    // Recurse into subdirectories using their (potentially renamed) paths.
-    if config.recursive {
-        let applied_map: HashMap<&Path, &Path> = applied
-            .iter()
-            .map(|op| (op.from.as_path(), op.to.as_path()))
-            .collect();
-        for subdir in &subdirs {
-            let effective = effective_subdir_path(subdir, &applied_map, config.dry_run);
-            if effective.is_dir() {
-                process_dir(&effective, config, counters);
             }
         }
     }
@@ -353,20 +179,7 @@ fn process_dir(dir: &Path, config: &Config, counters: &mut Counters) {
 /// Each path is renamed **itself** (not its contents). Missing paths are
 /// reported and counted as errors but do not abort the batch. Destination
 /// conflicts across the whole batch are detected together via `filter_conflicts`.
-///
-/// When `config.recursive` is set, every path that is a directory is — after
-/// its own rename — descended into with `process_dir`, so its contents are
-/// cleaned recursively too. Directory paths are snapshotted **before** any
-/// rename, then resolved to their post-rename location via `effective_subdir_path`.
 fn process_targets(paths: &[PathBuf], config: &Config, counters: &mut Counters) {
-    // Snapshot directory arguments BEFORE renaming, so `-r` can follow each to
-    // its real new path afterwards (the original path may no longer exist).
-    let dir_paths: Vec<PathBuf> = if config.recursive {
-        paths.iter().filter(|p| p.is_dir()).cloned().collect()
-    } else {
-        Vec::new()
-    };
-
     let mut ops = Vec::new();
     for path in paths {
         if !path.exists() {
@@ -380,20 +193,7 @@ fn process_targets(paths: &[PathBuf], config: &Config, counters: &mut Counters) 
     }
 
     let ops = filter_conflicts(ops);
-    let applied = apply_ops(&ops, config.dry_run, config.verbose, counters);
-
-    if config.recursive {
-        let applied_map: HashMap<&Path, &Path> = applied
-            .iter()
-            .map(|op| (op.from.as_path(), op.to.as_path()))
-            .collect();
-        for dir in &dir_paths {
-            let effective = effective_subdir_path(dir, &applied_map, config.dry_run);
-            if effective.is_dir() {
-                process_dir(&effective, config, counters);
-            }
-        }
-    }
+    apply_ops(&ops, config.dry_run, config.verbose, counters);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -406,21 +206,16 @@ fn main() {
     // syntactically valid command line.
     let cli = Cli::parse();
 
-    // Without a target-mode flag (-f, -d, or -a) AND without explicit paths,
-    // there is nothing to disambiguate the bare invocation: show help like -h.
-    // With explicit paths, the absence of a flag simply means "rename them all".
-    if cli.paths.is_empty() && !cli.files_only && !cli.dirs_only && !cli.all {
+    // Without explicit paths there is nothing to operate on: show help like -h.
+    if cli.paths.is_empty() {
         Cli::command().print_help().unwrap_or(());
         process::exit(0);
     }
 
-    let config = match build_config(cli) {
-        Ok(c) => c,
-        Err(msg) => {
-            eprintln!("Error: {msg}");
-            eprintln!("Run with --help for usage.");
-            process::exit(1);
-        }
+    let config = Config {
+        dry_run: cli.dry_run,
+        target: target_from(&cli),
+        verbose: cli.verbose,
     };
 
     if config.dry_run && config.verbose {
@@ -432,10 +227,7 @@ fn main() {
         errors: 0,
     };
 
-    match &config.mode {
-        Mode::Scan(dir) => process_dir(dir, &config, &mut counters),
-        Mode::Targets(paths) => process_targets(paths, &config, &mut counters),
-    }
+    process_targets(&cli.paths, &config, &mut counters);
 
     if config.verbose {
         let label = if config.dry_run {

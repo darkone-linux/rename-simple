@@ -9,6 +9,14 @@ A small Rust CLI tool that renames files and directories to clean, ASCII-safe sl
 
 ![rename-simple demo](assets/rename-simple.png)
 
+> [!WARNING]
+> **Breaking change (next minor release).** The directory-scan mode and the
+> `-a`/`--all` and `-r`/`--recursive` options have been removed.
+> `rename-simple` now operates **only** on the paths you give it, like
+> `rename`(1). Use your shell's globbing to select entries:
+> `rename-simple *` instead of `rename-simple -a`, and
+> `rename-simple **/*.pdf` instead of `-r`.
+
 ## What it does
 
 - Transliterates accented and extended Latin characters to ASCII (`é → e`, `ç → c`, `œ → oe`, `ß → ss`…)
@@ -32,26 +40,20 @@ cargo install --path .
 ## Usage
 
 ```
-rename-simple [OPTIONS] [PATH]...
+rename-simple [OPTIONS] <files>...
 ```
 
-Each `PATH` is an entry renamed **itself**, like the traditional `rename`
+Each argument is an entry renamed **itself**, like the traditional `rename`
 command — globbing is left to the shell (`rename-simple *.jpg`, or
-`rename-simple dir/**/*.pdf` with zsh / bash `globstar`). With explicit paths,
-files and directories are both renamed by default; `-f` / `-d` then act as a
-type filter.
-
-When **no** `PATH` is given, the entries of the current directory are processed
-(legacy behaviour); in that case you must specify one of `-f`, `-d`, or `-a`,
-otherwise `rename-simple` prints this help.
+`rename-simple dir/**/*.pdf` with zsh / bash `globstar`). Files and directories
+are both renamed by default; `-f` / `-d` act as a type filter. With no
+arguments, `rename-simple` prints this help.
 
 | Option | Description |
 |---|---|
-| `PATH...` | Entries to rename (default: entries of the current directory) |
+| `<files>...` | Entries to rename (files and/or directories) |
 | `-f` | Rename files only |
 | `-d` | Rename directories only |
-| `-a`, `--all` | Rename both files and directories |
-| `-r`, `--recursive` | Process subdirectories recursively |
 | `-n`, `--dry-run` | Preview renames without touching any file |
 | `-v`, `--verbose` | Show details of each rename |
 | `-h`, `--help` | Print help |
@@ -62,7 +64,7 @@ otherwise `rename-simple` prints this help.
 ### Preview all renames (dry-run)
 
 ```bash
-$ rename-simple -a --dry-run ~/Downloads/*
+$ rename-simple --dry-run ~/Downloads/*
 ```
 
 ```
@@ -80,7 +82,7 @@ $ rename-simple -a --dry-run ~/Downloads/*
 $ rename-simple -f ~/Downloads/*
 ```
 
-Directories are left untouched; only files are renamed.
+Directories among the arguments are left untouched; only files are renamed.
 
 ### Rename directories only
 
@@ -88,35 +90,31 @@ Directories are left untouched; only files are renamed.
 $ rename-simple -d ~/Projects/*
 ```
 
-Files are left untouched; only directories are renamed.
+Files among the arguments are left untouched; only directories are renamed.
 
 ### Rename everything
 
 ```bash
-$ rename-simple -a ~/Downloads/*
+$ rename-simple ~/Downloads/*
 ```
 
-### Recursive processing
+### Process a whole tree
+
+With a shell that supports recursive globs you can select entries at any depth:
 
 ```bash
-$ rename-simple -a --recursive ~/Documents/*
+$ rename-simple ~/Documents/**/*.pdf
 ```
-
-Renames files and directories at every level of the tree. With a shell that
-supports recursive globs you can also select by pattern, e.g.
-`rename-simple ~/Documents/**/*.pdf`.
 
 ### Verbose output
 
-The current-directory form (no path argument) prints a directory header:
+Verbose mode prints each rename and a summary:
 
 ```bash
-$ cd ~/Downloads && rename-simple -a -v
+$ rename-simple -v ~/Downloads/*
 ```
 
 ```
-Directory: /home/user/Downloads
-
   01_ Introduction au Projet.PDF  →  01-introduction-au-projet.pdf
   Réunion d'équipe (2024).docx    →  reunion-d-equipe-2024.docx
   Café Montreal.jpg               →  cafe-montreal.jpg
@@ -126,18 +124,19 @@ Directory: /home/user/Downloads
 
 ## Tips
 
-If you use `-a` most of the time, a shell alias saves a few keystrokes:
+Since the directory-scan mode is gone, "rename everything in the current
+directory" is now just `rename-simple *`. A shell alias makes it a habit:
 
 ```bash
-alias rsa='rename-simple -a'
+alias rsa='rename-simple *'
 ```
 
 Add this line to your `~/.bashrc` or `~/.zshrc`, then:
 
 ```bash
-rsa ~/Downloads          # rename everything
-rsa -r ~/Documents       # rename everything, recursively
-rsa -n ~/Downloads       # dry-run preview
+rsa                      # rename everything in the current directory
+rename-simple -n *       # dry-run preview
+rename-simple **/*.pdf   # rename every PDF in the tree (zsh / bash globstar)
 ```
 
 ## Running the tests

@@ -16,13 +16,13 @@ Telegraph style. Root rules only. Read scoped `AGENTS.md` before subtree work.
 src/
 ├── lib.rs      # Core transformation logic
 │               #   public API: transliterate_char, transform_stem,
-│               #               transform_filename, compute_renames,
-│               #               RenameOp, RenameTarget
-└── main.rs     # CLI (argument parsing, conflict detection, recursion driver)
+│               #               transform_filename, transform_dirname,
+│               #               plan_rename, RenameOp, RenameTarget
+└── main.rs     # CLI (argument parsing, conflict detection, rename driver)
 tests/
 ├── transform_tests.rs  # Pure unit tests for the transformation pipeline
 ├── cli_tests.rs        # End-to-end CLI integration tests
-└── recursive_tests.rs  # Recursive (`-r`) integration tests
+└── unix_tests.rs       # Unix-specific tests (symlinks, invalid UTF-8, perms)
 man/
 └── rename-simple.1     # Man page (kept in sync with the CLI manually)
 ```
@@ -33,7 +33,7 @@ man/
 - Tests located in `tests/` directory
 - Hidden files (starting with `.`) are skipped
 - Compound extensions (`.tar.gz`, `.tar.bz2`, `.tar.xz`, `.tar.zst`) are preserved
-- Recursive processing (`-r`) is implemented
+- Operates only on explicit path arguments (`rename`(1)-like); globbing is left to the shell
 
 ## Code Conventions
 
@@ -46,22 +46,22 @@ man/
 ## CLI Usage
 
 ```
-Usage: rename-simple [OPTIONS] [DIR]
+Usage: rename-simple [OPTIONS] [files]...
 
 Arguments:
-  [DIR]  Target directory (default: current directory)
+  [files]...  Entries to rename (files and/or directories)
 
 Options:
-  -f               Rename files only
-  -d               Rename directories only
-  -a, --all        Rename both files and directories
-  -r, --recursive  Process subdirectories recursively
-  -v, --verbose    Show details of what is being renamed
-  -n, --dry-run    Show what would be renamed without touching any entry
-  -h, --help       Print help
-  -V, --version    Print version
+  -f             Rename files only
+  -d             Rename directories only
+  -v, --verbose  Show details of what is being renamed
+  -n, --dry-run  Show what would be renamed without touching any entry
+  -h, --help     Print help
+  -V, --version  Print version
 ```
 
+Each argument is renamed itself (`rename`(1)-like); without `-f`/`-d` both files
+and directories are renamed. With no argument, the program prints its help.
 Exit status: `0` on success (including no-op), `1` on error.
 Default: no output; details only with `-v`.
 

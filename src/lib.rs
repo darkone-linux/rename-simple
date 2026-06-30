@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 use unicode_normalization::char::is_combining_mark;
 use unicode_normalization::UnicodeNormalization;
@@ -259,7 +258,7 @@ pub fn transform_dirname(name: &str) -> String {
 // Filesystem operations
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Controls which filesystem entries are processed by `compute_renames`.
+/// Controls which filesystem entries are processed by `plan_rename`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenameTarget {
     /// Rename both files and directories (default).
@@ -277,75 +276,19 @@ pub struct RenameOp {
     pub to: PathBuf,
 }
 
-/// Walk `dir` (non-recursively) and return the list of renames to perform.
-///
-/// The `target` parameter controls whether files, directories, or both are
-/// considered. Hidden entries (names starting with `.`) are always skipped.
-pub fn compute_renames(dir: &Path, target: RenameTarget) -> Result<Vec<RenameOp>, std::io::Error> {
-    let mut ops = Vec::new();
-
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-
-        let is_file = path.is_file();
-        let is_dir = path.is_dir();
-
-        // Filter by target
-        let include = match target {
-            RenameTarget::All => is_file || is_dir,
-            RenameTarget::FilesOnly => is_file,
-            RenameTarget::DirsOnly => is_dir,
-        };
-        if !include {
-            continue;
-        }
-
-        let original = match path.file_name().and_then(|n| n.to_str()) {
-            Some(name) => name.to_owned(),
-            None => continue,
-        };
-
-        // Skip hidden entries
-        if original.starts_with('.') {
-            continue;
-        }
-
-        // Directories have no extension, so a dot in their name is a plain
-        // separator: route them through transform_dirname, files through the
-        // extension-aware transform_filename.
-        let renamed = if is_dir {
-            transform_dirname(&original)
-        } else {
-            transform_filename(&original)
-        };
-
-        if renamed == original {
-            continue; // nothing to do
-        }
-
-        ops.push(RenameOp {
-            from: path.clone(),
-            to: dir.join(&renamed),
-        });
-    }
-
-    Ok(ops)
-}
-
 /// Compute the rename for a single explicit entry — the entry **itself**, not
 /// its contents.
 ///
-/// This is the counterpart of `compute_renames` for paths passed directly on
-/// the command line (the `rename`-like mode). Returns `None` when:
+/// Used for paths passed directly on the command line (the `rename`-like
+/// mode). Returns `None` when:
 /// - the entry is filtered out by `target` (e.g. a directory under `FilesOnly`);
 /// - the name is not valid UTF-8;
 /// - the transform is a no-op — the name is already clean, or it is a hidden
 ///   file (`transform_filename` / `transform_dirname` leave dotfiles unchanged,
 ///   so they naturally collapse to `None` here).
 ///
-/// `is_file` / `is_dir` follow symlinks, matching `compute_renames`. The
-/// destination keeps the entry's parent directory and only swaps the basename.
+/// `is_file` / `is_dir` follow symlinks. The destination keeps the entry's
+/// parent directory and only swaps the basename.
 #[must_use]
 pub fn plan_rename(path: &Path, target: RenameTarget) -> Option<RenameOp> {
     let is_file = path.is_file();

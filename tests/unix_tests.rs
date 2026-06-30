@@ -21,7 +21,7 @@ fn test_symlink_to_file_renames_link_not_target() {
     fs::write(dir.join("target.txt"), "TARGET CONTENT").unwrap();
     std::os::unix::fs::symlink("target.txt", dir.join("Lien Étrange.txt")).unwrap();
 
-    let output = cmd().arg("-a").current_dir(dir).output().unwrap();
+    let output = cmd().arg(dir.join("Lien Étrange.txt")).output().unwrap();
 
     assert!(output.status.success());
 
@@ -57,72 +57,21 @@ fn test_dangling_symlink_is_left_alone() {
     let temp_dir = tempfile::tempdir().unwrap();
     let dir = temp_dir.path();
 
-    // Symlink to a non-existent target. is_file()/is_dir() return false for
-    // dangling symlinks, so compute_renames should silently skip it.
+    // Symlink to a non-existent target. is_file()/is_dir() (and exists())
+    // return false for dangling symlinks, so it is never renamed.
     std::os::unix::fs::symlink("does-not-exist", dir.join("Dangling Link.txt")).unwrap();
     fs::write(dir.join("Real File.txt"), "x").unwrap();
 
-    let output = cmd().arg("-a").current_dir(dir).output().unwrap();
+    let output = cmd()
+        .arg(dir.join("Dangling Link.txt"))
+        .arg(dir.join("Real File.txt"))
+        .output()
+        .unwrap();
 
     assert!(output.status.success());
     assert!(dir.join("real-file.txt").exists());
     // Dangling symlink stays put under its original name
     assert!(fs::symlink_metadata(dir.join("Dangling Link.txt")).is_ok());
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Symlinks — recursion must not escape the target tree (audit C2)
-// ─────────────────────────────────────────────────────────────────────────────
-
-#[test]
-fn test_recursive_does_not_descend_into_subdir_symlink() {
-    // Layout:
-    //   <root>/
-    //     inside/
-    //       link -> <root>/outside
-    //     outside/
-    //       Sécret Fichier.txt
-    //
-    // After `rename-simple -a -r <root>/inside`, the file inside `outside/`
-    // MUST NOT be renamed — recursion must never follow a symlinked dir.
-    let root = tempfile::tempdir().unwrap();
-    let inside = root.path().join("inside");
-    let outside = root.path().join("outside");
-    fs::create_dir(&inside).unwrap();
-    fs::create_dir(&outside).unwrap();
-
-    fs::write(outside.join("Sécret Fichier.txt"), "secret").unwrap();
-    std::os::unix::fs::symlink(&outside, inside.join("link")).unwrap();
-
-    let output = cmd().arg("-a").arg("-r").arg(&inside).output().unwrap();
-
-    assert!(output.status.success());
-    assert!(
-        outside.join("Sécret Fichier.txt").exists(),
-        "recursion through a directory symlink must not rename files outside the target tree"
-    );
-    assert!(
-        !outside.join("secret-fichier.txt").exists(),
-        "no renamed twin must appear in the external directory"
-    );
-}
-
-#[test]
-fn test_recursive_symlink_loop_terminates() {
-    // dir/a -> dir/b, dir/b -> dir/a — a classic cycle. The program must
-    // terminate (Linux returns ELOOP after 40 hops; we still rely on the
-    // C2 fix to avoid following directory symlinks in the first place).
-    let temp_dir = tempfile::tempdir().unwrap();
-    let dir = temp_dir.path();
-    std::os::unix::fs::symlink(dir.join("b"), dir.join("a")).unwrap();
-    std::os::unix::fs::symlink(dir.join("a"), dir.join("b")).unwrap();
-
-    fs::write(dir.join("Real File.txt"), "x").unwrap();
-
-    let output = cmd().arg("-a").arg("-r").current_dir(dir).output().unwrap();
-
-    assert!(output.status.success(), "must terminate without panic");
-    assert!(dir.join("real-file.txt").exists());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -135,7 +84,8 @@ fn test_readonly_parent_yields_error_without_panic() {
 
     let temp_dir = tempfile::tempdir().unwrap();
     let dir = temp_dir.path();
-    fs::write(dir.join("Mon Fichier.txt"), "x").unwrap();
+    let file = dir.join("Mon Fichier.txt");
+    fs::write(&file, "x").unwrap();
 
     // Make the parent read-only: rename of the entry inside it must fail
     // (EACCES) but the program must not panic.
@@ -154,7 +104,7 @@ fn test_readonly_parent_yields_error_without_panic() {
         return;
     }
 
-    let output = cmd().arg("-a").current_dir(dir).output().unwrap();
+    let output = cmd().arg(&file).output().unwrap();
 
     // Restore writable perms BEFORE the temp dir tries to drop itself,
     // otherwise tempfile cannot clean up.
@@ -174,32 +124,8 @@ fn test_readonly_parent_yields_error_without_panic() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Invalid UTF-8 (audit M2 — verbose warning)
+// Invalid UTF-8 filenames
 // ─────────────────────────────────────────────────────────────────────────────
-
-#[test]
-fn test_invalid_utf8_filename_reports_warning_in_verbose() {
-    // Same setup as test_invalid_utf8_filename_does_not_panic, but with -v:
-    // the user must be told *which* entry was skipped instead of the rename
-    // silently dropping it.
-    let temp_dir = tempfile::tempdir().unwrap();
-    let dir = temp_dir.path();
-    let bad_bytes: &[u8] = &[b'b', b'a', b'd', 0xff, 0xfe, b'.', b't', b'x', b't'];
-    let bad_name = OsStr::from_bytes(bad_bytes);
-    fs::write(dir.join(bad_name), "x").unwrap();
-    fs::write(dir.join("Bon Fichier.txt"), "y").unwrap();
-
-    let output = cmd().arg("-a").arg("-v").current_dir(dir).output().unwrap();
-
-    assert!(output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.to_lowercase().contains("invalid")
-            || stderr.to_lowercase().contains("skip")
-            || stderr.to_lowercase().contains("non-utf"),
-        "verbose mode must surface the skipped non-UTF-8 entry, stderr was: {stderr}"
-    );
-}
 
 #[test]
 fn test_invalid_utf8_filename_does_not_panic() {
@@ -215,7 +141,11 @@ fn test_invalid_utf8_filename_does_not_panic() {
     // Add a normal file alongside so we can confirm it still gets renamed.
     fs::write(dir.join("Bon Fichier.txt"), "y").unwrap();
 
-    let output = cmd().arg("-a").current_dir(dir).output().unwrap();
+    let output = cmd()
+        .arg(&bad_path)
+        .arg(dir.join("Bon Fichier.txt"))
+        .output()
+        .unwrap();
 
     assert!(output.status.success(), "must not crash on invalid UTF-8");
     assert!(

@@ -3,25 +3,22 @@
 rename-simple \- clean filenames to lowercase, ASCII-safe slugs
 .SH SYNOPSIS
 .B rename-simple
-[OPTIONS] [\fIPATH\fR]...
+[OPTIONS] \fIfiles\fR...
 .SH DESCRIPTION
 .B rename-simple
 renames files and/or directories by normalising accented characters, replacing
 spaces and special characters with hyphens, and lowercasing everything.
 .PP
-Each \fIPATH\fR argument is an entry that is renamed \fBitself\fR (like the
+Each \fIfiles\fR argument is an entry that is renamed \fBitself\fR (like the
 traditional \fBrename\fR(1) command): the program acts on the arguments you
 give it, not on their contents. Globbing is left to the shell, so
 \fBrename-simple\fR \fI*.jpg\fR renames every matching file, and (with a shell
 that supports recursive globs, e.g. \fBzsh\fR or \fBbash\fR with
 \fIglobstar\fR) \fBrename-simple\fR \fIdir/**/*.pdf\fR cleans a whole subtree.
 .PP
-When \fBno\fR \fIPATH\fR is given, the entries of the current directory are
-processed instead (legacy behaviour); in that case exactly one of \fB\-f\fR,
-\fB\-d\fR or \fB\-a\fR must be specified to select what to rename, otherwise the
-program prints its help and exits. When explicit paths are given, both files
-and directories are renamed by default and \fB\-f\fR / \fB\-d\fR act as a type
-filter on the arguments.
+Both files and directories are renamed by default; \fB\-f\fR / \fB\-d\fR act as
+a type filter on the arguments. When \fBno\fR argument is given, the program
+prints its help and exits.
 .PP
 The transformation pipeline is:
 .IP 1. 4
@@ -57,13 +54,6 @@ Rename files only.
 .B \-d
 Rename directories only.
 .TP
-.B \-a, \-\-all
-Rename both files and directories.
-.TP
-.B \-r, \-\-recursive
-Process subdirectories recursively. When a directory is given as an explicit
-\fIPATH\fR, it is renamed and then its contents are cleaned recursively.
-.TP
 .B \-v, \-\-verbose
 Show details of each rename operation and a summary.
 .TP
@@ -85,22 +75,19 @@ Rename specific files (the arguments themselves)
 rename-simple "Mon Fichier.txt" *.jpg
 .TP
 Rename both files and directories in the current directory
-rename-simple \-a
+rename-simple *
 .TP
-Rename the files in a specific directory with verbose output
+Rename files only, with verbose output
 rename-simple \-f \-v ~/Downloads/*
 .TP
 Preview what would be renamed without touching anything
-rename-simple \-a \-n \-v
+rename-simple \-n \-v *
 .TP
-Rename a directory and recursively clean its contents
-rename-simple \-r "Mon Dossier"
-.TP
-Recursively rename every PDF under a directory (zsh / bash globstar)
+Rename every PDF under a directory (zsh / bash globstar)
 rename-simple ~/Documents/**/*.pdf
 .TP
 Rename directories only
-rename-simple \-d
+rename-simple \-d *
 .SH AUTHOR
 Written by darkone-linux.
 .SH REPORTING BUGS
