@@ -10,7 +10,7 @@ A small Rust CLI tool that renames files and directories to clean, ASCII-safe sl
 ![rename-simple demo](assets/rename-simple.gif)
 
 > [!WARNING]
-> **Breaking change (next minor release).** The directory-scan mode and the
+> **Breaking change since 0.4.0.** The directory-scan mode and the
 > `-a`/`--all` and `-r`/`--recursive` options have been removed.
 > `rename-simple` now operates **only** on the paths you give it, like
 > `rename`(1). Use your shell's globbing to select entries:
@@ -34,6 +34,10 @@ A small Rust CLI tool that renames files and directories to clean, ASCII-safe sl
 Requires [Rust](https://www.rust-lang.org/tools/install) 1.70+.
 
 ```bash
+# From crates.io
+cargo install rename-simple
+
+# Or from source
 cargo install --path .
 ```
 
@@ -117,8 +121,8 @@ $ rename-simple -v ~/Downloads/*
 ```
   01_ Introduction au Projet.PDF  →  01-introduction-au-projet.pdf
   Réunion d'équipe (2024).docx    →  reunion-d-equipe-2024.docx
-  Café Montreal.jpg               →  cafe-montreal.jpg
-
+  Café Montréal.jpg               →  cafe-montreal.jpg
+  …
 3 entry/entries renamed, 0 error(s).
 ```
 
