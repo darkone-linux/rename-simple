@@ -1,6 +1,6 @@
 [package]
 name = "rename-simple"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.70"
 description = "Rename files by normalizing accented characters, spaces and special chars to clean ASCII slugs"
