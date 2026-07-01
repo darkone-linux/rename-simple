@@ -307,7 +307,13 @@ fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) 
         }
     }
 
-    let ops = filter_conflicts(ops, reporter);
+    // Rename the deepest entries first: a descendant path always has more
+    // components than its ancestor, so sorting by descending depth guarantees
+    // that files and leaf directories are renamed before the directories that
+    // contain them. Otherwise renaming a parent first would invalidate the
+    // stored child paths and make their renames fail with ENOENT.
+    let mut ops = filter_conflicts(ops, reporter);
+    ops.sort_by_key(|op| std::cmp::Reverse(op.from.components().count()));
     apply_ops(&ops, config.dry_run, reporter);
 }
 

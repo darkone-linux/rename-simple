@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already-clean entry (reported as `[X]`) from one excluded by the type filter
   or an invalid-UTF-8 name.
 
+### Fixed
+- **Parent renamed before its contents**: when a directory and entries inside
+  it were passed together (e.g. `rename-simple **/*`), renaming the parent
+  first invalidated the child paths and made their renames fail with ENOENT.
+  Renames are now applied deepest-first, so files and leaf directories are
+  handled before the directories that contain them.
+
 ### Removed
 - **BREAKING — directory-scan mode**: `rename-simple` no longer reads the
   current directory when invoked without paths; it operates only on the
