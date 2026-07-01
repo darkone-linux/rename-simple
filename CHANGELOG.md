@@ -57,6 +57,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shell-alias tip is now `alias rsa='rename-simple *'`.
 - Tests reworked around explicit paths; `tests/recursive_tests.rs` removed.
 
+### Dependencies
+- Refreshed the lockfile: `bstr` 1.12.1 → 1.12.3, `getrandom` 0.4.2 → 0.4.3,
+  `quote` 1.0.45 → 1.0.46, `syn` 2.0.117 → 2.0.118.
+- Bumping `getrandom` drops the transitive `wit-*` / `wasip2` / `wasip3` /
+  `wasm-*` / `anyhow` / `serde` toolchain pulled in via `tempfile`, shrinking the
+  dependency tree from 83 to 55 crates.
+- Clears `RUSTSEC-2026-0190` (unsoundness in `anyhow::Error::downcast_mut`): the
+  affected `anyhow` 1.0.102 is no longer part of the tree.
+
 ## [0.3.1] - 2026-06-15
 
 ### Fixed
