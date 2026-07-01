@@ -9,6 +9,7 @@ repository = "https://github.com/darkone-linux/rename-simple"
 readme = "README.md"
 keywords = ["rust", "cli", "rename"]
 categories = ["command-line-utilities"]
+exclude = ["assets/"]
 
 [[bin]]
 name = "rename-simple"
