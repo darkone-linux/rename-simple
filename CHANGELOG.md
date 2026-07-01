@@ -13,6 +13,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   traditional `rename`(1) command. Globbing is left to the shell, so
   `rename-simple *.jpg` or `rename-simple dir/**/*.pdf` (with `globstar`) work
   as expected. New public `plan_rename` function backs this mode.
+- **Structured, colourised output** with three verbosity levels:
+  - `-q`/`--quiet`: print nothing at all (errors included);
+  - default: one line per renamed (`[R] source -> dest`) or errored
+    (`[E] source -> message`) entry, followed by a summary;
+  - `-v`/`--verbose`: also list untouched entries (`[X] source`).
+
+  The `R`/`E`/`X` marks and the `->` arrow are colourised (magenta / red /
+  green) only when the stream is a terminal, so piped output stays plain. The
+  summary reads `N entries matched, N entries renamed, N errors.` with correct
+  singular/plural forms.
+- New public `plan_entry` function and `RenamePlan` enum, distinguishing an
+  already-clean entry (reported as `[X]`) from one excluded by the type filter
+  or an invalid-UTF-8 name.
 
 ### Removed
 - **BREAKING — directory-scan mode**: `rename-simple` no longer reads the
@@ -27,6 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `-f` / `-d` now act purely as a type filter on the explicit arguments.
+- **Output redesign**: the default mode is no longer silent — it prints the
+  `[R]`/`[E]` lines plus a summary. Use `-q` to restore fully silent behaviour.
+  Conflicts and errors are reported as `[E]` lines (`-q` suppresses them too).
 - README, man page and `AGENTS.md` updated for the rename-like model; the
   shell-alias tip is now `alias rsa='rename-simple *'`.
 - Tests reworked around explicit paths; `tests/recursive_tests.rs` removed.

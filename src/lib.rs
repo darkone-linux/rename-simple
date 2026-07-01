@@ -276,21 +276,32 @@ pub struct RenameOp {
     pub to: PathBuf,
 }
 
-/// Compute the rename for a single explicit entry — the entry **itself**, not
-/// its contents.
+/// Outcome of planning a rename for a single explicit entry.
+///
+/// Unlike `plan_rename`, this distinguishes an entry that is *matched but
+/// already clean* (a no-op worth reporting as skipped) from one that is *not a
+/// rename candidate at all* (filtered out by the type flag, or an invalid
+/// UTF-8 name). The CLI needs that distinction to report the `[X]` lines and
+/// the "matched" count correctly.
+#[derive(Debug, Clone)]
+pub enum RenamePlan {
+    /// The entry needs renaming.
+    Rename(RenameOp),
+    /// The entry matched the target filter but is already clean: nothing to do.
+    AlreadyClean,
+    /// The entry is not a rename candidate: it does not match the target
+    /// filter (e.g. a directory under `FilesOnly`), or its name is not valid
+    /// UTF-8.
+    Excluded,
+}
+
+/// Classify a single explicit entry — the entry **itself**, not its contents.
 ///
 /// Used for paths passed directly on the command line (the `rename`-like
-/// mode). Returns `None` when:
-/// - the entry is filtered out by `target` (e.g. a directory under `FilesOnly`);
-/// - the name is not valid UTF-8;
-/// - the transform is a no-op — the name is already clean, or it is a hidden
-///   file (`transform_filename` / `transform_dirname` leave dotfiles unchanged,
-///   so they naturally collapse to `None` here).
-///
-/// `is_file` / `is_dir` follow symlinks. The destination keeps the entry's
-/// parent directory and only swaps the basename.
+/// mode). `is_file` / `is_dir` follow symlinks. When a rename is needed the
+/// destination keeps the entry's parent directory and only swaps the basename.
 #[must_use]
-pub fn plan_rename(path: &Path, target: RenameTarget) -> Option<RenameOp> {
+pub fn plan_entry(path: &Path, target: RenameTarget) -> RenamePlan {
     let is_file = path.is_file();
     let is_dir = path.is_dir();
 
@@ -300,10 +311,12 @@ pub fn plan_rename(path: &Path, target: RenameTarget) -> Option<RenameOp> {
         RenameTarget::DirsOnly => is_dir,
     };
     if !include {
-        return None;
+        return RenamePlan::Excluded;
     }
 
-    let original = path.file_name().and_then(|n| n.to_str())?;
+    let Some(original) = path.file_name().and_then(|n| n.to_str()) else {
+        return RenamePlan::Excluded;
+    };
 
     // Directories have no extension (a dot is a plain separator), so route them
     // through transform_dirname; files through the extension-aware transform.
@@ -314,15 +327,28 @@ pub fn plan_rename(path: &Path, target: RenameTarget) -> Option<RenameOp> {
     };
 
     if renamed == original {
-        return None; // nothing to do (already clean or hidden file)
+        return RenamePlan::AlreadyClean; // already clean or hidden file
     }
 
     let to = path
         .parent()
         .unwrap_or_else(|| Path::new(""))
         .join(&renamed);
-    Some(RenameOp {
+    RenamePlan::Rename(RenameOp {
         from: path.to_path_buf(),
         to,
     })
+}
+
+/// Compute the rename for a single explicit entry, returning `None` when there
+/// is nothing to do (already clean, filtered out, or invalid UTF-8).
+///
+/// Thin wrapper over `plan_entry` for callers that only care whether a rename
+/// is needed.
+#[must_use]
+pub fn plan_rename(path: &Path, target: RenameTarget) -> Option<RenameOp> {
+    match plan_entry(path, target) {
+        RenamePlan::Rename(op) => Some(op),
+        RenamePlan::AlreadyClean | RenamePlan::Excluded => None,
+    }
 }

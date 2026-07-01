@@ -138,7 +138,7 @@ fn test_conflict_warning() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let combined = format!("{stdout}{stderr}");
-    assert!(combined.to_uppercase().contains("CONFLICT"));
+    assert!(combined.contains("[E]"));
 }
 
 #[test]
@@ -212,11 +212,56 @@ fn test_numbers_preserved() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// stdout / stderr discipline (quiet mode is the default)
+// Verbosity: quiet (-q) / normal (default) / verbose (-v)
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
-fn test_quiet_mode_produces_no_stdout() {
+fn test_quiet_mode_produces_no_output_at_all() {
+    // -q suppresses everything: renamed lines, errors and the final report.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("Fichier Test.txt"), "content").unwrap();
+
+    let output = cmd()
+        .arg("-q")
+        .arg(dir.join("Fichier Test.txt"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(
+        output.stdout.is_empty() && output.stderr.is_empty(),
+        "quiet mode must be silent, got stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(dir.join("fichier-test.txt").exists());
+}
+
+#[test]
+fn test_quiet_mode_stays_silent_on_conflicts() {
+    // Even conflicts are suppressed under -q.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("café.txt"), "1").unwrap();
+    fs::write(dir.join("CAFÉ.TXT"), "2").unwrap();
+
+    let output = cmd()
+        .arg("-q")
+        .arg(dir.join("café.txt"))
+        .arg(dir.join("CAFÉ.TXT"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty() && output.stderr.is_empty());
+}
+
+#[test]
+fn test_normal_mode_reports_rename_and_summary() {
+    // The default mode prints the [R] line on stdout and a final report.
     let temp_dir = tempfile::tempdir().unwrap();
     let dir = temp_dir.path();
 
@@ -225,16 +270,17 @@ fn test_quiet_mode_produces_no_stdout() {
     let output = cmd().arg(dir.join("Fichier Test.txt")).output().unwrap();
 
     assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("[R]"), "expected a [R] line, got: {stdout}");
+    assert!(stdout.contains("fichier-test.txt"));
     assert!(
-        output.stdout.is_empty(),
-        "expected no stdout in quiet mode, got: {:?}",
-        String::from_utf8_lossy(&output.stdout)
+        stdout.contains("1 entry matched") && stdout.contains("1 entry renamed"),
+        "expected a summary line, got: {stdout}"
     );
-    assert!(dir.join("fichier-test.txt").exists());
 }
 
 #[test]
-fn test_quiet_mode_still_reports_conflicts_on_stderr() {
+fn test_normal_mode_reports_conflicts_on_stderr() {
     let temp_dir = tempfile::tempdir().unwrap();
     let dir = temp_dir.path();
 
@@ -248,24 +294,53 @@ fn test_quiet_mode_still_reports_conflicts_on_stderr() {
         .unwrap();
 
     assert!(output.status.success());
-    assert!(output.stdout.is_empty());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.to_uppercase().contains("CONFLICT"));
+    assert!(
+        stderr.contains("[E]"),
+        "expected an [E] line, got: {stderr}"
+    );
 }
 
 #[test]
-fn test_noop_produces_no_output() {
-    // An already-clean target is a no-op: no stdout, no stderr, success.
+fn test_noop_is_hidden_in_normal_but_shown_with_verbose() {
+    // An already-clean target produces no [R]/[E] line. In normal mode only the
+    // report shows it (as matched); with -v the [X] line appears too.
     let temp_dir = tempfile::tempdir().unwrap();
     let dir = temp_dir.path();
 
     fs::write(dir.join("already-clean.txt"), "content").unwrap();
 
-    let output = cmd().arg(dir.join("already-clean.txt")).output().unwrap();
+    let normal = cmd().arg(dir.join("already-clean.txt")).output().unwrap();
+    assert!(normal.status.success());
+    let normal_out = String::from_utf8_lossy(&normal.stdout);
+    assert!(!normal_out.contains("[X]"), "no [X] line without -v");
+    assert!(normal_out.contains("1 entry matched") && normal_out.contains("0 entry renamed"));
 
-    assert!(output.status.success());
-    assert!(output.stdout.is_empty());
-    assert!(output.stderr.is_empty());
+    let verbose = cmd()
+        .arg("-v")
+        .arg(dir.join("already-clean.txt"))
+        .output()
+        .unwrap();
+    assert!(verbose.status.success());
+    let verbose_out = String::from_utf8_lossy(&verbose.stdout);
+    assert!(verbose_out.contains("[X]"), "expected [X] line with -v");
+    assert!(verbose_out.contains("already-clean.txt"));
+}
+
+#[test]
+fn test_quiet_conflicts_with_verbose() {
+    let temp_dir = tempfile::tempdir().unwrap();
+
+    let output = cmd()
+        .arg("-q")
+        .arg("-v")
+        .current_dir(temp_dir.path())
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("-q") && stderr.contains("-v"));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -281,7 +356,8 @@ fn test_nonexistent_path_reports_error() {
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.to_lowercase().contains("does not exist") || stderr.to_lowercase().contains("error")
+        stderr.contains("[E]"),
+        "missing entry must be an error: {stderr}"
     );
 }
 
@@ -467,7 +543,7 @@ fn test_unnamed_collision_two_sources_skipped() {
     assert!(dir.join("!!!.txt").exists(), "first source must stay");
     assert!(dir.join("***.txt").exists(), "second source must stay");
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.to_uppercase().contains("CONFLICT"));
+    assert!(stderr.contains("[E]"));
 }
 
 #[test]
@@ -541,7 +617,7 @@ fn test_three_way_conflict_all_skipped() {
     assert!(dir.join("café.txt").exists());
     assert!(dir.join("CAFE.txt").exists());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.to_uppercase().contains("CONFLICT"));
+    assert!(stderr.contains("[E]"));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -646,5 +722,5 @@ fn test_conflicting_explicit_arguments_are_skipped() {
     assert!(dir.join("Café.txt").exists());
     assert!(dir.join("café.txt").exists());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.to_uppercase().contains("CONFLICT"));
+    assert!(stderr.contains("[E]"));
 }

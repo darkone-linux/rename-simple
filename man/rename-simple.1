@@ -44,8 +44,11 @@ full transliteration pipeline.
 .PP
 Hidden files (names starting with a dot) are never modified.
 .PP
-By default the program produces no output on success. Use
-\fB\-v\fR/\fB\-\-verbose\fR to display details.
+By default the program prints one line per renamed entry (\fB[R]\fR) or error
+(\fB[E]\fR) followed by a one-line summary. Use \fB\-v\fR/\fB\-\-verbose\fR to
+also list untouched entries (\fB[X]\fR), or \fB\-q\fR/\fB\-\-quiet\fR to
+suppress all output. Marks and arrows are colourised when the output is a
+terminal.
 .SH OPTIONS
 .TP
 .B \-f
@@ -54,8 +57,11 @@ Rename files only.
 .B \-d
 Rename directories only.
 .TP
+.B \-q, \-\-quiet
+Print nothing at all.
+.TP
 .B \-v, \-\-verbose
-Show details of each rename operation and a summary.
+Show every entry, including the ones left untouched, plus the summary.
 .TP
 .B \-n, \-\-dry-run
 Show what would be renamed without actually renaming any entry.
