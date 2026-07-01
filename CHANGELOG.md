@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   green) only when the stream is a terminal, so piped output stays plain. The
   summary reads `N entries matched, N entries renamed, N errors.` with correct
   singular/plural forms.
+- Each output line now carries a grey `dir:` prefix locating where the entry
+  lives (`.` for the current directory, the relative sub-path for nested
+  entries), e.g. `[R] Sub Dir: Photo.jpg -> photo.jpg`.
 - New public `plan_entry` function and `RenamePlan` enum, distinguishing an
   already-clean entry (reported as `[X]`) from one excluded by the type filter
   or an invalid-UTF-8 name.

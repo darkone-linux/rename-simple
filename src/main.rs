@@ -109,6 +109,7 @@ fn verbosity_from(cli: &Cli) -> Verbosity {
 const MAGENTA: &str = "\x1b[35m";
 const RED: &str = "\x1b[31m";
 const GREEN: &str = "\x1b[32m";
+const GREY: &str = "\x1b[90m";
 const RESET: &str = "\x1b[0m";
 
 /// Wrap `text` in an ANSI colour escape, but only when `enabled` (the target
@@ -139,6 +140,16 @@ fn plural_errors(n: usize) -> &'static str {
     }
 }
 
+/// Grey `parent:` prefix locating the directory the entry lives in. The current
+/// directory is shown as `.`. Coloured only when `tty` is set.
+fn location(path: &Path, tty: bool) -> String {
+    let dir = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p.to_string_lossy().into_owned(),
+        _ => ".".to_owned(),
+    };
+    paint(tty, GREY, &format!("{dir}:"))
+}
+
 /// Prints the per-entry lines and the final report, honouring the verbosity
 /// level and disabling colours when the streams are not terminals.
 struct Reporter {
@@ -162,37 +173,44 @@ impl Reporter {
         }
     }
 
-    /// Report a successful (or, in dry-run, planned) rename: `[R] from -> to`.
-    fn renamed(&mut self, from: &str, to: &str) {
+    /// Report a successful (or, in dry-run, planned) rename:
+    /// `[R] dir: source -> dest`.
+    fn renamed(&mut self, from: &Path, to: &str) {
         self.renamed += 1;
         if self.verbosity == Verbosity::Quiet {
             return;
         }
         let mark = paint(self.stdout_tty, MAGENTA, "R");
+        let loc = location(from, self.stdout_tty);
+        let name = display_name(from);
         let arrow = paint(self.stdout_tty, MAGENTA, "->");
-        println!("[{mark}] {from} {arrow} {to}");
+        println!("[{mark}] {loc} {name} {arrow} {to}");
     }
 
-    /// Report a per-entry error: `[E] source -> message`.
-    fn error(&mut self, source: &str, message: &str) {
+    /// Report a per-entry error: `[E] dir: source -> message`.
+    fn error(&mut self, source: &Path, message: &str) {
         self.errors += 1;
         if self.verbosity == Verbosity::Quiet {
             return;
         }
         let mark = paint(self.stderr_tty, RED, "E");
+        let loc = location(source, self.stderr_tty);
+        let name = display_name(source);
         let arrow = paint(self.stderr_tty, RED, "->");
-        eprintln!("[{mark}] {source} {arrow} {message}");
+        eprintln!("[{mark}] {loc} {name} {arrow} {message}");
     }
 
-    /// Report an entry that matched but needed no rename: `[X] source`.
+    /// Report an entry that matched but needed no rename: `[X] dir: source`.
     /// Only shown in verbose mode.
-    fn skipped(&mut self, source: &str) {
+    fn skipped(&mut self, source: &Path) {
         self.skipped += 1;
         if self.verbosity != Verbosity::Verbose {
             return;
         }
         let mark = paint(self.stdout_tty, GREEN, "X");
-        println!("[{mark}] {source}");
+        let loc = location(source, self.stdout_tty);
+        let name = display_name(source);
+        println!("[{mark}] {loc} {name}");
     }
 
     /// Print the final one-line summary. Silent in quiet mode.
@@ -226,12 +244,9 @@ fn filter_conflicts(ops: Vec<RenameOp>, reporter: &mut Reporter) -> Vec<RenameOp
     let mut safe = Vec::new();
     for op in ops {
         if dest_count[&op.to] > 1 {
-            reporter.error(
-                &display_name(&op.from),
-                "Multiple entries would produce this name",
-            );
+            reporter.error(&op.from, "Multiple entries would produce this name");
         } else if op.to.exists() {
-            reporter.error(&display_name(&op.from), "File name already exists");
+            reporter.error(&op.from, "File name already exists");
         } else {
             safe.push(op);
         }
@@ -274,15 +289,14 @@ fn rename_no_clobber(from: &Path, to: &Path) -> std::io::Result<()> {
 /// Apply a list of rename operations, reporting each result.
 fn apply_ops(ops: &[RenameOp], dry_run: bool, reporter: &mut Reporter) {
     for op in ops {
-        let from_name = display_name(&op.from);
         let to_name = display_name(&op.to);
 
         if dry_run {
-            reporter.renamed(&from_name, &to_name);
+            reporter.renamed(&op.from, &to_name);
         } else {
             match rename_no_clobber(&op.from, &op.to) {
-                Ok(()) => reporter.renamed(&from_name, &to_name),
-                Err(e) => reporter.error(&from_name, &e.to_string()),
+                Ok(()) => reporter.renamed(&op.from, &to_name),
+                Err(e) => reporter.error(&op.from, &e.to_string()),
             }
         }
     }
@@ -297,12 +311,12 @@ fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) 
     let mut ops = Vec::new();
     for path in paths {
         if !path.exists() {
-            reporter.error(&path.display().to_string(), "No such file or directory");
+            reporter.error(path, "No such file or directory");
             continue;
         }
         match plan_entry(path, config.target) {
             RenamePlan::Rename(op) => ops.push(op),
-            RenamePlan::AlreadyClean => reporter.skipped(&display_name(path)),
+            RenamePlan::AlreadyClean => reporter.skipped(path),
             RenamePlan::Excluded => {}
         }
     }

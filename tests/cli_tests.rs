@@ -328,6 +328,51 @@ fn test_noop_is_hidden_in_normal_but_shown_with_verbose() {
 }
 
 #[test]
+fn test_output_shows_directory_prefix() {
+    // Each line is prefixed with the directory the entry lives in: `.` for the
+    // current directory, and the relative sub-path for nested entries. The
+    // prefix is rendered plain (uncolourised) when output is captured.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::create_dir(dir.join("Sub Dir")).unwrap();
+    fs::write(dir.join("Sub Dir/Fichier À.txt"), "x").unwrap();
+
+    // A relative argument so the prefix is exactly `Sub Dir`.
+    let output = cmd()
+        .current_dir(dir)
+        .arg("Sub Dir/Fichier À.txt")
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Sub Dir: Fichier À.txt -> fichier-a.txt"),
+        "expected a directory-prefixed [R] line, got: {stdout}"
+    );
+}
+
+#[test]
+fn test_current_dir_prefix_is_dot() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("Mon Fichier.txt"), "x").unwrap();
+
+    let output = cmd()
+        .current_dir(dir)
+        .arg("Mon Fichier.txt")
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(".: Mon Fichier.txt -> mon-fichier.txt"),
+        "expected a `.:` prefix for a current-dir entry, got: {stdout}"
+    );
+}
+
+#[test]
 fn test_quiet_conflicts_with_verbose() {
     let temp_dir = tempfile::tempdir().unwrap();
 
