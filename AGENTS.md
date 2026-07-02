@@ -60,12 +60,16 @@ Arguments:
   [files]...  Entries to rename (files and/or directories)
 
 Options:
-  -f             Rename files only
-  -d             Rename directories only
-  -v, --verbose  Show details of what is being renamed
-  -n, --dry-run  Show what would be renamed without touching any entry
-  -h, --help     Print help
-  -V, --version  Print version
+  -f, --files-only   Rename files only
+  -d, --dirs-only    Rename directories only
+  -U, --fix-unicode  Repair mojibake (UTF-8 wrongly decoded as Latin-1/CP1252) before renaming
+  -H, --fix-html     Strip HTML tags and decode HTML entities before renaming
+  -A, --fix-all      Apply every cleanup fix (currently equivalent to -U -H)
+  -q, --quiet        Print nothing at all
+  -v, --verbose      Show every entry, including the ones left untouched
+  -n, --dry-run      Show what would be renamed without touching any entry
+  -h, --help         Print help
+  -V, --version      Print version
 ```
 
 Each argument is renamed itself (`rename`(1)-like); without `-f`/`-d` both files

@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-07-02
+
+### Added
+- **`-U`/`--fix-unicode`**: repairs mojibake before renaming — names whose
+  UTF-8 bytes were wrongly decoded as Latin-1 or Windows-1252 (`CafÃ©.txt` is
+  treated as `Café.txt` and becomes `cafe.txt`; CP1252 artefacts like `â€™`
+  for `’` are handled too). The repair is all-or-nothing per name: anything
+  not fully re-decodable is left untouched, so correctly named files are never
+  corrupted. Double/triple mojibake (`CafÃƒÂ©`) is repaired iteratively.
+  New public `fix_unicode` function.
+- **`-H`/`--fix-html`**: strips HTML tags and decodes HTML entities before
+  renaming (`<b>Tom &amp; Jerry.mp4` → `tom-jerry.mp4`). Supports named
+  (`&eacute;`), decimal (`&#233;`) and hexadecimal (`&#xE9;`) entities;
+  anything that does not parse as a tag or entity is kept verbatim. New
+  public `fix_html` function.
+- **`-A`/`--fix-all`**: applies every cleanup fix (currently `-U` + `-H`);
+  future cleanup passes will be folded into it. New public `CleanupOptions`
+  struct and `transform_filename_with` / `transform_dirname_with` /
+  `plan_entry_with` functions carrying the options through the library API
+  (the historical functions keep their exact behaviour).
+- **Greek and Cyrillic romanisation**: Greek (`Ελληνικά` → `ellinika`,
+  `θ` → `th`, `ψ` → `ps`) and Cyrillic — Russian plus common
+  Ukrainian/Belarusian letters (`Москва` → `moskva`, `ж` → `zh`,
+  `щ` → `shch`) — instead of collapsing to dashes.
+- **More Latin transliterations**: capital sharp s `ẞ`, eng `Ŋ/ŋ` → `ng`,
+  schwa `Ə/ə` and open vowels `Ɛ/ɛ`/`Ɔ/ɔ`, f-hook `ƒ`, kra `ĸ`, and the
+  Serbo-Croatian digraph code points `Ǆ/Ǉ/Ǌ/Ǳ` → `dz`/`lj`/`nj`/`dz`.
+- 55 new tests covering the transliteration additions, both cleanup fixes and
+  the new CLI flags (unit + end-to-end).
+
+### Changed
+- The slug pipeline now normalises to **NFKD** (compatibility decomposition)
+  instead of NFD: typographic ligatures (`ﬁle` → `file`), fullwidth forms
+  (`Ｆｉｌｅ０１` → `file01`), superscripts/subscripts (`x²` → `x2`), `™` → `tm`,
+  `№` → `no` and vulgar fractions (`½` → `1-2`) now transliterate instead of
+  collapsing to dashes.
+- Man page normalised: `.TH` synced with the package version, synopsis
+  enumerates every short flag, options use standard bold/roman formatting,
+  `-V`/`--version` documented, exit status clarified (per-entry failures do
+  not change it), and the new cleanup options documented with examples.
+  `groff` renders it warning-free.
+- Internal cleanup: the duplicated dash/underscore collapsing helpers merged
+  into a single `collapse_runs` function.
+
 ## [0.4.1] - 2026-07-02
 
 ### Added

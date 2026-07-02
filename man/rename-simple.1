@@ -1,9 +1,17 @@
-.TH RENAME-SIMPLE 1 "2026-07-02" "rename-simple 0.4.0" "User Commands"
+.TH RENAME-SIMPLE 1 "2026-07-02" "rename-simple 0.5.0" "User Commands"
 .SH NAME
 rename-simple \- clean filenames to lowercase, ASCII-safe slugs
 .SH SYNOPSIS
 .B rename-simple
-[\fB\-f\fR | \fB\-d\fR] [\fB\-n\fR] [\fB\-v\fR | \fB\-q\fR] [\fB\-h\fR | \fB\-V\fR] \fIfiles\fR...
+[\fB\-f\fR | \fB\-d\fR]
+[\fB\-U\fR]
+[\fB\-H\fR]
+[\fB\-A\fR]
+[\fB\-n\fR]
+[\fB\-v\fR | \fB\-q\fR]
+[\fB\-h\fR]
+[\fB\-V\fR]
+\fIfiles\fR...
 .SH DESCRIPTION
 .B rename-simple
 renames files and/or directories by normalising accented characters, replacing
@@ -22,23 +30,31 @@ prints its help and exits.
 .PP
 The transformation pipeline is:
 .IP 1. 4
-Transliterate accented and non-ASCII characters to their ASCII equivalents
-(e.g. é -> e, ß -> ss, Æ -> ae).
+Transliterate accented and non-ASCII characters to their ASCII equivalents.
+This covers Latin scripts (e.g. \[u00E9] -> e, \[u00DF] -> ss,
+\[u00C6] -> ae), typographic ligatures and compatibility forms
+(\[uFB01] -> fi, fullwidth letters, superscripts, \[u2122] -> tm), and Greek
+and Cyrillic letters through a simple romanisation
+(\[u039B] -> l, \[u0416] -> zh).
 .IP 2. 4
 Replace all remaining special characters with a hyphen (\fB\-\fR).
 .IP 3. 4
 Collapse consecutive hyphens into a single hyphen.
 .IP 4. 4
-Clean underscore/hyphen boundaries (\fI_-\fR and \fI-_\fR become \fI_\fR).
+Clean underscore/hyphen boundaries (\fI_\-\fR and \fI\-_\fR become \fI_\fR).
 .IP 5. 4
 Collapse consecutive underscores.
 .IP 6. 4
 Strip leading and trailing hyphens and underscores.
 .PP
+The optional cleanup fixes (\fB\-U\fR, \fB\-H\fR, \fB\-A\fR) run \fBbefore\fR
+this pipeline: they repair the name (mojibake, HTML markup) so that the slug
+is computed from the intended text rather than from the damaged one.
+.PP
 Compound extensions (\fI.tar.gz\fR, \fI.tar.bz2\fR, \fI.tar.xz\fR,
 \fI.tar.zst\fR) are preserved. An extension is only kept separate when it
 consists entirely of ASCII alphanumeric characters and is at most 10 characters
-long.  Extensions containing accents, spaces, punctuation or exceeding 10
+long. Extensions containing accents, spaces, punctuation or exceeding 10
 characters are re-absorbed into the filename stem and processed through the
 full transliteration pipeline.
 .PP
@@ -51,55 +67,87 @@ suppress all output. Marks and arrows are colourised when the output is a
 terminal.
 .SH OPTIONS
 .TP
-.B \-f, \-\-files\-only
+\fB\-f\fR, \fB\-\-files\-only\fR
 Rename files only.
 .TP
-.B \-d, \-\-dirs\-only
+\fB\-d\fR, \fB\-\-dirs\-only\fR
 Rename directories only.
 .TP
-.B \-q, \-\-quiet
+\fB\-U\fR, \fB\-\-fix\-unicode\fR
+Repair mojibake before renaming: names whose UTF-8 bytes were wrongly decoded
+as Latin-1 or Windows-1252 (e.g. \fICafÃ©.txt\fR is treated as
+\fICaf\[u00E9].txt\fR and becomes \fIcafe.txt\fR). The repair is all-or-nothing:
+a name that is not fully re-decodable is left untouched, so correctly named
+files are never corrupted. Double mojibake is handled.
+.TP
+\fB\-H\fR, \fB\-\-fix\-html\fR
+Strip HTML tags and decode HTML entities before renaming (e.g.
+\fI<b>Tom &amp; Jerry.mp4\fR is treated as \fITom & Jerry.mp4\fR and becomes
+\fItom\-jerry.mp4\fR). Named (\fI&eacute;\fR), decimal (\fI&#233;\fR) and
+hexadecimal (\fI&#xE9;\fR) entities are supported; anything that does not
+parse as a tag or entity is kept verbatim.
+.TP
+\fB\-A\fR, \fB\-\-fix\-all\fR
+Apply every cleanup fix. Currently equivalent to \fB\-U\fR \fB\-H\fR; future
+cleanup fixes will be folded into this option.
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
 Print nothing at all.
 .TP
-.B \-v, \-\-verbose
+\fB\-v\fR, \fB\-\-verbose\fR
 Show every entry, including the ones left untouched, plus the summary.
 .TP
-.B \-n, \-\-dry-run
+\fB\-n\fR, \fB\-\-dry\-run\fR
 Show what would be renamed without actually renaming any entry.
 .TP
-.B \-h, \-\-help
+\fB\-h\fR, \fB\-\-help\fR
 Print a help message and exit.
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version information and exit.
 .SH EXIT STATUS
 .TP
-0
+.B 0
 All entries were renamed successfully (or no entries needed renaming).
+Per-entry failures (missing entry, conflict, I/O error) are reported on
+standard error but do not change the exit status.
 .TP
-1
-An error occurred (invalid arguments, I/O error, etc.).
+.B 1
+An error occurred (invalid command-line arguments).
 .SH EXAMPLES
 .TP
 Rename specific files (the arguments themselves)
-rename-simple "Mon Fichier.txt" *.jpg
+.B rename-simple
+"Mon Fichier.txt" *.jpg
 .TP
 Rename both files and directories in the current directory
-rename-simple *
+.B rename-simple
+*
 .TP
 Rename files only, with verbose output
-rename-simple \-f \-v ~/Downloads/*
+.B rename-simple
+\fB\-f\fR \fB\-v\fR ~/Downloads/*
 .TP
 Preview what would be renamed without touching anything
-rename-simple \-n \-v *
+.B rename-simple
+\fB\-n\fR \fB\-v\fR *
+.TP
+Repair mojibake and strip HTML markup while renaming
+.B rename-simple
+\fB\-A\fR ~/Downloads/*
 .TP
 Rename every PDF under a directory (zsh / bash globstar)
-rename-simple ~/Documents/**/*.pdf
+.B rename-simple
+~/Documents/**/*.pdf
 .TP
 Rename directories only
-rename-simple \-d *
+.B rename-simple
+\fB\-d\fR *
 .SH AUTHOR
 Written by darkone-linux.
 .SH REPORTING BUGS
-.B GitHub:
-.UR https://github.com/darkone-linux/rename-simple
-https://github.com/darkone-linux/rename-simple
+.UR https://github.com/darkone-linux/rename-simple/issues
+GitHub: https://github.com/darkone-linux/rename-simple/issues
 .UE
 .SH COPYRIGHT
 Copyright \[co] 2026 darkone-linux.

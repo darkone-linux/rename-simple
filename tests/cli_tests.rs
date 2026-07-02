@@ -769,3 +769,107 @@ fn test_conflicting_explicit_arguments_are_skipped() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("[E]"));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cleanup fixes: -U / --fix-unicode, -H / --fix-html, -A / --fix-all
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_fix_unicode_repairs_mojibake() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("CafÃ© MontrÃ©al.txt"), "content").unwrap();
+
+    let output = cmd()
+        .arg("-U")
+        .arg(dir.join("CafÃ© MontrÃ©al.txt"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("cafe-montreal.txt").exists());
+}
+
+#[test]
+fn test_without_fix_unicode_mojibake_goes_through_raw_pipeline() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("CafÃ©.txt"), "content").unwrap();
+
+    let output = cmd().arg(dir.join("CafÃ©.txt")).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("cafa.txt").exists());
+}
+
+#[test]
+fn test_fix_html_strips_tags_and_entities() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    // Note: a real filename cannot contain '/', so closing tags like </b>
+    // never appear; an opening tag and entities are the realistic case.
+    fs::write(dir.join("<b>Tom &amp; Jerry.mp4"), "content").unwrap();
+
+    let output = cmd()
+        .arg("--fix-html")
+        .arg(dir.join("<b>Tom &amp; Jerry.mp4"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("tom-jerry.mp4").exists());
+}
+
+#[test]
+fn test_fix_all_applies_unicode_and_html() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("CafÃ© &amp; <i>The.txt"), "content").unwrap();
+
+    let output = cmd()
+        .arg("-A")
+        .arg(dir.join("CafÃ© &amp; <i>The.txt"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("cafe-the.txt").exists());
+}
+
+#[test]
+fn test_fix_all_on_directory() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::create_dir(dir.join("DonnÃ©es &amp; Archives")).unwrap();
+
+    let output = cmd()
+        .arg("--fix-all")
+        .arg(dir.join("DonnÃ©es &amp; Archives"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("donnees-archives").is_dir());
+}
+
+#[test]
+fn test_cleanup_flags_combine_with_dry_run() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("CafÃ©.txt"), "content").unwrap();
+
+    let output = cmd()
+        .arg("-n")
+        .arg("-U")
+        .arg(dir.join("CafÃ©.txt"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("cafe.txt"),
+        "dry-run must preview the fixed name: {stdout}"
+    );
+    assert!(dir.join("CafÃ©.txt").exists(), "dry-run must not rename");
+}

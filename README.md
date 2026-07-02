@@ -20,6 +20,8 @@ A small Rust CLI tool that renames files and directories to clean, ASCII-safe sl
 ## What it does
 
 - Transliterates accented and extended Latin characters to ASCII (`é → e`, `ç → c`, `œ → oe`, `ß → ss`…)
+- Expands typographic ligatures and compatibility forms (`ﬁ → fi`, fullwidth `Ｆｉｌｅ → file`, superscripts `² → 2`, `™ → tm`, `№ → no`)
+- Romanises Greek and Cyrillic letters (`Ελληνικά → ellinika`, `Москва → moskva`)
 - Lowercases everything
 - Replaces spaces and special characters with `-`; collapses consecutive separators
 - Preserves `_`; cleans up `_-` and `-_` sequences to `_`
@@ -28,6 +30,7 @@ A small Rust CLI tool that renames files and directories to clean, ASCII-safe sl
 - Keeps extensions separate only when they are ASCII alphanumeric and ≤10 characters
   (e.g. `.tét` → absorbed as `-tet`; `.abcdefghijkl` (12 chars) → absorbed as `-abcdefghijkl`)
 - Skips hidden files (`.gitignore`, `.DS_Store`…) and flags naming conflicts
+- Optional cleanup fixes: repairs mojibake (`-U`), strips HTML tags and entities (`-H`), or both (`-A`)
 
 ## Installation
 
@@ -58,7 +61,11 @@ arguments, `rename-simple` prints this help.
 | `<files>...` | Entries to rename (files and/or directories) |
 | `-f`, `--files-only` | Rename files only |
 | `-d`, `--dirs-only` | Rename directories only |
+| `-U`, `--fix-unicode` | Repair mojibake (UTF-8 misread as Latin-1/CP1252) before renaming |
+| `-H`, `--fix-html` | Strip HTML tags and decode HTML entities before renaming |
+| `-A`, `--fix-all` | Apply every cleanup fix (currently `-U` + `-H`) |
 | `-n`, `--dry-run` | Preview renames without touching any file |
+| `-q`, `--quiet` | Print nothing at all |
 | `-v`, `--verbose` | Show details of each rename |
 | `-h`, `--help` | Print help |
 | `-V`, `--version` | Print version |
@@ -110,6 +117,29 @@ With a shell that supports recursive globs you can select entries at any depth:
 ```bash
 $ rename-simple ~/Documents/**/*.pdf
 ```
+
+### Repair damaged names (mojibake, HTML)
+
+Names coming from broken downloads or web scrapers often carry mojibake
+(UTF-8 read as Latin-1/CP1252) or HTML markup. The cleanup fixes repair the
+name **before** the slug pipeline runs:
+
+```bash
+$ rename-simple -A ~/Downloads/*
+```
+
+```
+[R] .: CafÃ© MontrÃ©al.jpg -> cafe-montreal.jpg
+[R] .: Tom &amp; Jerry.mp4 -> tom-jerry.mp4
+[R] .: <b>Ã‰tÃ© 2024.pdf -> ete-2024.pdf
+3 entries matched, 3 entries renamed, 0 error.
+```
+
+`-U`/`--fix-unicode` is all-or-nothing per name: a file that is already
+correctly named (`café.jpg`) is never re-decoded, so the fix is safe to apply
+everywhere. Double mojibake (`CafÃƒÂ©`) is repaired too. `-H`/`--fix-html`
+strips tags and decodes named (`&eacute;`), decimal (`&#233;`) and hex
+(`&#xE9;`) entities. `-A`/`--fix-all` applies every cleanup fix.
 
 ### Verbose output
 

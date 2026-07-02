@@ -1,5 +1,5 @@
 use clap::{CommandFactory, Parser};
-use rename_files::{plan_entry, RenameOp, RenamePlan, RenameTarget};
+use rename_files::{plan_entry_with, CleanupOptions, RenameOp, RenamePlan, RenameTarget};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::IsTerminal;
@@ -43,6 +43,25 @@ struct Cli {
     #[arg(short = 'd', long = "dirs-only", conflicts_with = "files_only")]
     dirs_only: bool,
 
+    /// Repair mojibake (UTF-8 wrongly decoded as Latin-1/CP1252) before
+    /// renaming, e.g. "CafÃ©.txt" is treated as "Café.txt"
+    #[arg(short = 'U', long = "fix-unicode")]
+    fix_unicode: bool,
+
+    // The help text is an explicit attribute rather than a doc comment: the
+    // "<b>" example would trip rustdoc's invalid_html_tags lint.
+    #[arg(
+        short = 'H',
+        long = "fix-html",
+        help = "Strip HTML tags and decode HTML entities before renaming, \
+                e.g. \"<b>Tom &amp; Jerry.txt\" is treated as \"Tom & Jerry.txt\""
+    )]
+    fix_html: bool,
+
+    /// Apply every cleanup fix (currently equivalent to -U -H)
+    #[arg(short = 'A', long = "fix-all")]
+    fix_all: bool,
+
     /// Print nothing at all
     #[arg(short = 'q', long, conflicts_with = "verbose")]
     quiet: bool,
@@ -76,6 +95,7 @@ enum Verbosity {
 struct Config {
     dry_run: bool,
     target: RenameTarget,
+    cleanup: CleanupOptions,
 }
 
 /// Select what kind of entries to rename from the parsed flags. Without `-f`
@@ -87,6 +107,14 @@ fn target_from(cli: &Cli) -> RenameTarget {
         RenameTarget::DirsOnly
     } else {
         RenameTarget::All
+    }
+}
+
+/// Collect the cleanup fixes from the parsed flags; `-A` enables them all.
+fn cleanup_from(cli: &Cli) -> CleanupOptions {
+    CleanupOptions {
+        fix_unicode: cli.fix_unicode || cli.fix_all,
+        fix_html: cli.fix_html || cli.fix_all,
     }
 }
 
@@ -314,7 +342,7 @@ fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) 
             reporter.error(path, "No such file or directory");
             continue;
         }
-        match plan_entry(path, config.target) {
+        match plan_entry_with(path, config.target, config.cleanup) {
             RenamePlan::Rename(op) => ops.push(op),
             RenamePlan::AlreadyClean => reporter.skipped(path),
             RenamePlan::Excluded => {}
@@ -350,6 +378,7 @@ fn main() {
     let config = Config {
         dry_run: cli.dry_run,
         target: target_from(&cli),
+        cleanup: cleanup_from(&cli),
     };
 
     let mut reporter = Reporter::new(verbosity_from(&cli));

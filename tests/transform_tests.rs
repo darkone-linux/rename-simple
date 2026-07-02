@@ -1,4 +1,7 @@
-use rename_files::{transform_dirname, transform_filename, transform_stem, transliterate_char};
+use rename_files::{
+    fix_html, fix_unicode, transform_dirname, transform_dirname_with, transform_filename,
+    transform_filename_with, transform_stem, transliterate_char, CleanupOptions,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // transliterate_char
@@ -270,6 +273,137 @@ mod transliterate_char_tests {
             assert_eq!(transliterate_char(c), "-", "failed for '{c}'");
         }
     }
+
+    // — Extra non-decomposable Latin letters and digraphs ─────────────────────
+    #[test]
+    fn capital_sharp_s() {
+        assert_eq!(transliterate_char('ẞ'), "ss");
+    }
+
+    #[test]
+    fn eng_letter() {
+        // Sami / African languages
+        assert_eq!(transliterate_char('Ŋ'), "ng");
+        assert_eq!(transliterate_char('ŋ'), "ng");
+    }
+
+    #[test]
+    fn schwa_and_open_vowels() {
+        // Azerbaijani schwa, African open e / open o
+        for c in ['Ə', 'ə', 'Ɛ', 'ɛ'] {
+            assert_eq!(transliterate_char(c), "e", "failed for '{c}'");
+        }
+        for c in ['Ɔ', 'ɔ'] {
+            assert_eq!(transliterate_char(c), "o", "failed for '{c}'");
+        }
+    }
+
+    #[test]
+    fn f_with_hook_and_kra() {
+        assert_eq!(transliterate_char('ƒ'), "f");
+        assert_eq!(transliterate_char('ĸ'), "k");
+    }
+
+    #[test]
+    fn serbo_croatian_digraphs() {
+        for c in ['Ǆ', 'ǅ', 'ǆ', 'Ǳ', 'ǲ', 'ǳ'] {
+            assert_eq!(transliterate_char(c), "dz", "failed for '{c}'");
+        }
+        for c in ['Ǉ', 'ǈ', 'ǉ'] {
+            assert_eq!(transliterate_char(c), "lj", "failed for '{c}'");
+        }
+        for c in ['Ǌ', 'ǋ', 'ǌ'] {
+            assert_eq!(transliterate_char(c), "nj", "failed for '{c}'");
+        }
+    }
+
+    // — Compatibility (NFKD) forms ────────────────────────────────────────────
+    #[test]
+    fn typographic_ligatures_expand() {
+        assert_eq!(transliterate_char('ﬀ'), "ff");
+        assert_eq!(transliterate_char('ﬁ'), "fi");
+        assert_eq!(transliterate_char('ﬂ'), "fl");
+        assert_eq!(transliterate_char('ﬃ'), "ffi");
+        assert_eq!(transliterate_char('ﬄ'), "ffl");
+        assert_eq!(transliterate_char('ﬆ'), "st");
+    }
+
+    #[test]
+    fn letterlike_symbols_expand() {
+        assert_eq!(transliterate_char('™'), "tm");
+        assert_eq!(transliterate_char('№'), "no");
+    }
+
+    #[test]
+    fn fullwidth_forms_map_to_ascii() {
+        assert_eq!(transliterate_char('Ａ'), "a");
+        assert_eq!(transliterate_char('ｚ'), "z");
+        assert_eq!(transliterate_char('５'), "5");
+    }
+
+    #[test]
+    fn superscripts_and_subscripts_map_to_digits() {
+        assert_eq!(transliterate_char('²'), "2");
+        assert_eq!(transliterate_char('³'), "3");
+        assert_eq!(transliterate_char('₄'), "4");
+    }
+
+    #[test]
+    fn long_s_maps_to_s() {
+        // U+017F LATIN SMALL LETTER LONG S has a compat decomposition to 's'
+        assert_eq!(transliterate_char('ſ'), "s");
+    }
+
+    #[test]
+    fn micro_sign_maps_like_greek_mu() {
+        // U+00B5 MICRO SIGN lowercases to Greek mu
+        assert_eq!(transliterate_char('µ'), "m");
+    }
+
+    // — Greek ─────────────────────────────────────────────────────────────────
+    #[test]
+    fn greek_letters_romanise() {
+        assert_eq!(transliterate_char('α'), "a");
+        assert_eq!(transliterate_char('Ω'), "o");
+        assert_eq!(transliterate_char('θ'), "th");
+        assert_eq!(transliterate_char('χ'), "ch");
+        assert_eq!(transliterate_char('ψ'), "ps");
+        assert_eq!(transliterate_char('σ'), "s");
+        assert_eq!(transliterate_char('ς'), "s"); // final sigma
+    }
+
+    #[test]
+    fn accented_greek_uses_base_letter() {
+        assert_eq!(transliterate_char('ά'), "a");
+        assert_eq!(transliterate_char('Έ'), "e");
+        assert_eq!(transliterate_char('ώ'), "o");
+    }
+
+    // — Cyrillic ──────────────────────────────────────────────────────────────
+    #[test]
+    fn cyrillic_letters_romanise() {
+        assert_eq!(transliterate_char('ж'), "zh");
+        assert_eq!(transliterate_char('Х'), "kh");
+        assert_eq!(transliterate_char('ц'), "ts");
+        assert_eq!(transliterate_char('Ч'), "ch");
+        assert_eq!(transliterate_char('ш'), "sh");
+        assert_eq!(transliterate_char('щ'), "shch");
+        assert_eq!(transliterate_char('ю'), "yu");
+        assert_eq!(transliterate_char('Я'), "ya");
+    }
+
+    #[test]
+    fn cyrillic_signs_are_dropped() {
+        assert_eq!(transliterate_char('ъ'), "");
+        assert_eq!(transliterate_char('ь'), "");
+    }
+
+    #[test]
+    fn cyrillic_yo_decomposes_to_e() {
+        // Ё/ё canonically decompose to Е/е + diaeresis
+        assert_eq!(transliterate_char('Ё'), "e");
+        assert_eq!(transliterate_char('ё'), "e");
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -508,6 +642,57 @@ mod transform_stem_tests {
     #[test]
     fn mixed_latin_and_cjk_keeps_latin() {
         assert_eq!(transform_stem("hello 你好 world"), "hello-world");
+    }
+
+    // — Greek and Cyrillic words ──────────────────────────────────────────────
+    #[test]
+    fn greek_words() {
+        assert_eq!(transform_stem("Ελληνικά"), "ellinika");
+        assert_eq!(transform_stem("θάλασσα"), "thalassa");
+        assert_eq!(transform_stem("Φιλοσοφία"), "filosofia");
+    }
+
+    #[test]
+    fn russian_words() {
+        assert_eq!(transform_stem("Москва"), "moskva");
+        assert_eq!(transform_stem("Хорошо"), "khorosho");
+        assert_eq!(transform_stem("Объект"), "obekt");
+        assert_eq!(transform_stem("Ёлка"), "elka");
+    }
+
+    #[test]
+    fn ukrainian_words() {
+        assert_eq!(transform_stem("Київ"), "kiiv");
+        assert_eq!(transform_stem("Ґанок"), "ganok");
+    }
+
+    // — Compatibility (NFKD) forms in words ───────────────────────────────────
+    #[test]
+    fn ligatures_in_words_expand() {
+        assert_eq!(transform_stem("ﬁle ﬂow"), "file-flow");
+        assert_eq!(transform_stem("diﬃcult"), "difficult");
+    }
+
+    #[test]
+    fn fullwidth_words_map_to_ascii() {
+        assert_eq!(transform_stem("Ｆｉｌｅ０１"), "file01");
+    }
+
+    #[test]
+    fn superscripts_in_words() {
+        assert_eq!(transform_stem("x² plus y³"), "x2-plus-y3");
+    }
+
+    #[test]
+    fn trademark_and_numero_in_words() {
+        assert_eq!(transform_stem("Brand™"), "brandtm");
+        assert_eq!(transform_stem("№ 5"), "no-5");
+    }
+
+    #[test]
+    fn vulgar_fraction_splits_on_fraction_slash() {
+        // NFKD(½) = "1⁄2"; the fraction slash becomes a dash
+        assert_eq!(transform_stem("recette ½ sucre"), "recette-1-2-sucre");
     }
 }
 
@@ -874,5 +1059,237 @@ mod transform_dirname_tests {
     fn empty_after_transform_returns_unnamed() {
         assert_eq!(transform_dirname("!!!---!!!"), "unnamed");
         assert_eq!(transform_dirname("   "), "unnamed");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// fix_unicode (mojibake repair)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod fix_unicode_tests {
+    use super::*;
+
+    #[test]
+    fn simple_latin1_mojibake_is_repaired() {
+        assert_eq!(fix_unicode("CafÃ©"), "Café");
+        assert_eq!(fix_unicode("RÃ©union d'Ã©quipe"), "Réunion d'équipe");
+        assert_eq!(fix_unicode("DonnÃ©es Ã©tÃ©"), "Données été");
+    }
+
+    #[test]
+    fn cp1252_mojibake_is_repaired() {
+        // ’ (U+2019) encodes as E2 80 99 in UTF-8; misread as CP1252 → "â€™"
+        assert_eq!(fix_unicode("Tomâ€™s"), "Tom’s");
+        // œ (U+0153) encodes as C5 93; misread as CP1252 → "Å“"
+        assert_eq!(fix_unicode("cÅ“ur"), "cœur");
+    }
+
+    #[test]
+    fn double_mojibake_is_repaired() {
+        // é → mojibake "Ã©" → mojibake again → "ÃƒÂ©"
+        assert_eq!(fix_unicode("CafÃƒÂ©"), "Café");
+    }
+
+    #[test]
+    fn correct_names_are_left_alone() {
+        assert_eq!(fix_unicode("hello.txt"), "hello.txt");
+        assert_eq!(fix_unicode("café"), "café");
+        assert_eq!(fix_unicode("Réunion d'équipe"), "Réunion d'équipe");
+        assert_eq!(fix_unicode("naïve straße"), "naïve straße");
+    }
+
+    #[test]
+    fn names_with_chars_beyond_cp1252_are_left_alone() {
+        assert_eq!(fix_unicode("photo 🦀"), "photo 🦀");
+        assert_eq!(fix_unicode("中文"), "中文");
+    }
+
+    #[test]
+    fn empty_string_is_left_alone() {
+        assert_eq!(fix_unicode(""), "");
+    }
+
+    #[test]
+    fn repair_is_idempotent() {
+        let fixed = fix_unicode("CafÃ©");
+        assert_eq!(fix_unicode(&fixed), fixed);
+    }
+
+    #[test]
+    fn transform_filename_with_fix_unicode() {
+        let opts = CleanupOptions {
+            fix_unicode: true,
+            ..CleanupOptions::default()
+        };
+        assert_eq!(
+            transform_filename_with("CafÃ© MontrÃ©al.jpg", opts),
+            "cafe-montreal.jpg"
+        );
+        // Without the fix, Ã and © go through the raw slug pipeline
+        assert_eq!(
+            transform_filename("CafÃ© MontrÃ©al.jpg"),
+            "cafa-montra-al.jpg"
+        );
+    }
+
+    #[test]
+    fn transform_dirname_with_fix_unicode() {
+        let opts = CleanupOptions {
+            fix_unicode: true,
+            ..CleanupOptions::default()
+        };
+        assert_eq!(
+            transform_dirname_with("DonnÃ©es 2024", opts),
+            "donnees-2024"
+        );
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// fix_html (tag stripping + entity decoding)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod fix_html_tests {
+    use super::*;
+
+    #[test]
+    fn tags_are_stripped() {
+        assert_eq!(fix_html("<b>Hello</b> World"), "Hello World");
+        assert_eq!(fix_html("<h1>Title</h1>"), "Title");
+        assert_eq!(fix_html("a<br/>b"), "ab");
+    }
+
+    #[test]
+    fn tags_with_attributes_are_stripped() {
+        assert_eq!(fix_html("<a href=\"index.html\">Link</a>"), "Link");
+        assert_eq!(fix_html("<img src='photo.jpg' alt='x'>legend"), "legend");
+    }
+
+    #[test]
+    fn comments_and_doctype_are_stripped() {
+        assert_eq!(fix_html("a<!-- note -->b"), "ab");
+        assert_eq!(fix_html("<!DOCTYPE html>page"), "page");
+    }
+
+    #[test]
+    fn lone_angle_brackets_are_kept() {
+        // '<' not followed by a letter, '/' or '!' is not a tag
+        assert_eq!(fix_html("a < b"), "a < b");
+        assert_eq!(fix_html("1<2 et 3>2"), "1<2 et 3>2");
+    }
+
+    #[test]
+    fn unclosed_tag_is_kept_verbatim() {
+        assert_eq!(fix_html("foo<b.txt"), "foo<b.txt");
+    }
+
+    #[test]
+    fn core_entities_are_decoded() {
+        assert_eq!(fix_html("Tom &amp; Jerry"), "Tom & Jerry");
+        assert_eq!(fix_html("1 &lt; 2 &gt; 0"), "1 < 2 > 0");
+        assert_eq!(fix_html("l&apos;heure"), "l'heure");
+        assert_eq!(fix_html("a&nbsp;b"), "a b");
+    }
+
+    #[test]
+    fn accented_entities_are_decoded() {
+        assert_eq!(fix_html("&eacute;t&eacute;"), "été");
+        assert_eq!(fix_html("gar&ccedil;on"), "garçon");
+        assert_eq!(fix_html("stra&szlig;e"), "straße");
+        // Uppercase named entities fall back to the lowercase table
+        assert_eq!(fix_html("&Eacute;t&eacute;"), "été");
+    }
+
+    #[test]
+    fn numeric_entities_are_decoded() {
+        assert_eq!(fix_html("&#233;t&#233;"), "été");
+        assert_eq!(fix_html("&#xE9;t&#xe9;"), "été");
+    }
+
+    #[test]
+    fn unknown_or_malformed_entities_are_kept() {
+        assert_eq!(fix_html("&zzz;"), "&zzz;");
+        assert_eq!(fix_html("Tom & Jerry"), "Tom & Jerry");
+        assert_eq!(fix_html("100&"), "100&");
+        // Numeric entity for a control character is refused
+        assert_eq!(fix_html("&#0;"), "&#0;");
+    }
+
+    #[test]
+    fn decoded_lt_does_not_create_a_new_tag() {
+        // Tags are stripped before entities are decoded
+        assert_eq!(fix_html("&lt;b&gt;text&lt;/b&gt;"), "<b>text</b>");
+    }
+
+    #[test]
+    fn transform_filename_with_fix_html() {
+        let opts = CleanupOptions {
+            fix_html: true,
+            ..CleanupOptions::default()
+        };
+        assert_eq!(
+            transform_filename_with("<h1>Mon &Eacute;t&eacute;</h1>.txt", opts),
+            "mon-ete.txt"
+        );
+        assert_eq!(
+            transform_filename_with("Tom &amp; Jerry.mp4", opts),
+            "tom-jerry.mp4"
+        );
+    }
+
+    #[test]
+    fn transform_dirname_with_fix_html() {
+        let opts = CleanupOptions {
+            fix_html: true,
+            ..CleanupOptions::default()
+        };
+        assert_eq!(
+            transform_dirname_with("<b>Mes Documents</b>", opts),
+            "mes-documents"
+        );
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CleanupOptions combinations
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod cleanup_options_tests {
+    use super::*;
+
+    #[test]
+    fn default_applies_nothing() {
+        let name = "CafÃ© &amp; <i>The</i>.txt";
+        assert_eq!(
+            transform_filename_with(name, CleanupOptions::default()),
+            transform_filename(name)
+        );
+    }
+
+    #[test]
+    fn all_enables_every_fix() {
+        let opts = CleanupOptions::all();
+        assert!(opts.fix_unicode);
+        assert!(opts.fix_html);
+    }
+
+    #[test]
+    fn unicode_then_html_are_applied_in_order() {
+        // Mojibake is repaired first, then the HTML markup is removed
+        assert_eq!(
+            transform_filename_with("CafÃ© &amp; <i>The</i>.txt", CleanupOptions::all()),
+            "cafe-the.txt"
+        );
+    }
+
+    #[test]
+    fn hidden_files_skip_cleanup_too() {
+        assert_eq!(
+            transform_filename_with(".hidden<b>.txt", CleanupOptions::all()),
+            ".hidden<b>.txt"
+        );
     }
 }
