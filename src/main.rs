@@ -36,11 +36,11 @@ fn display_name(path: &Path) -> Cow<'_, str> {
 #[allow(clippy::struct_excessive_bools)]
 struct Cli {
     /// Rename files only
-    #[arg(short = 'f', conflicts_with = "dirs_only")]
+    #[arg(short = 'f', long = "files-only", conflicts_with = "dirs_only")]
     files_only: bool,
 
     /// Rename directories only
-    #[arg(short = 'd', conflicts_with = "files_only")]
+    #[arg(short = 'd', long = "dirs-only", conflicts_with = "files_only")]
     dirs_only: bool,
 
     /// Print nothing at all

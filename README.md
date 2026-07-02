@@ -56,8 +56,8 @@ arguments, `rename-simple` prints this help.
 | Option | Description |
 |---|---|
 | `<files>...` | Entries to rename (files and/or directories) |
-| `-f` | Rename files only |
-| `-d` | Rename directories only |
+| `-f`, `--files-only` | Rename files only |
+| `-d`, `--dirs-only` | Rename directories only |
 | `-n`, `--dry-run` | Preview renames without touching any file |
 | `-v`, `--verbose` | Show details of each rename |
 | `-h`, `--help` | Print help |
@@ -72,12 +72,13 @@ $ rename-simple --dry-run ~/Downloads/*
 ```
 
 ```
-  01_ Introduction au Projet.PDF  →  01-introduction-au-projet.pdf
-  Réunion d'équipe (2024).docx    →  reunion-d-equipe-2024.docx
-  backup.TAR.GZ                   →  backup.tar.gz
-  Café Montréal.jpg               →  cafe-montreal.jpg
-  à faire .tét                    →  a-faire-tet
-  notes.cuicuicuicui              →  notes-cuicuicuicui
+[R] .: 01_ Introduction au Projet.PDF -> 01_introduction-au-projet.pdf
+[R] .: Réunion d'équipe (2024).docx -> reunion-d-equipe-2024.docx
+[R] .: backup.TAR.GZ -> backup.tar.gz
+[R] .: Café Montréal.jpg -> cafe-montreal.jpg
+[R] .: à faire .tét -> a-faire-tet
+[R] .: notes.cuicuicuicui -> notes-cuicuicuicui
+6 entries matched, 6 entries renamed, 0 error.
 ```
 
 ### Rename files only
@@ -119,11 +120,13 @@ $ rename-simple -v ~/Downloads/*
 ```
 
 ```
-  01_ Introduction au Projet.PDF  →  01-introduction-au-projet.pdf
-  Réunion d'équipe (2024).docx    →  reunion-d-equipe-2024.docx
-  Café Montréal.jpg               →  cafe-montreal.jpg
-  …
-3 entry/entries renamed, 0 error(s).
+[R] .: 01_ Introduction au Projet.PDF -> 01_introduction-au-projet.pdf
+[R] .: Réunion d'équipe (2024).docx -> reunion-d-equipe-2024.docx
+[R] .: backup.TAR.GZ -> backup.tar.gz
+[R] .: Café Montréal.jpg -> cafe-montreal.jpg
+[R] .: à faire .tét -> a-faire-tet
+[R] .: notes.cuicuicuicui -> notes-cuicuicuicui
+6 entries matched, 6 entries renamed, 0 error.
 ```
 
 ## Tips
