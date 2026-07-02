@@ -83,9 +83,13 @@ files are never corrupted. Double mojibake is handled.
 \fB\-H\fR, \fB\-\-fix\-html\fR
 Strip HTML tags and decode HTML entities before renaming (e.g.
 \fI<b>Tom &amp; Jerry.mp4\fR is treated as \fITom & Jerry.mp4\fR and becomes
-\fItom\-jerry.mp4\fR). Named (\fI&eacute;\fR), decimal (\fI&#233;\fR) and
-hexadecimal (\fI&#xE9;\fR) entities are supported; anything that does not
-parse as a tag or entity is kept verbatim.
+\fItom\-jerry.mp4\fR). Block\-level tags (\fI<br>\fR, \fI<p>\fR, \fI<div>\fR,
+\fI<li>\fR, \fI<h1>\fR\[en]\fI<h6>\fR, ...) are replaced by a space so the
+surrounding words stay separated (\fIdata<br>client\fR becomes
+\fIdata\-client\fR), while inline tags (\fI<b>\fR, \fI<i>\fR, \fI<span>\fR, ...)
+are removed with no gap (\fIclient<b>s\fR becomes \fIclients\fR). Named
+(\fI&eacute;\fR), decimal (\fI&#233;\fR) and hexadecimal (\fI&#xE9;\fR) entities
+are supported; anything that does not parse as a tag or entity is kept verbatim.
 .TP
 \fB\-A\fR, \fB\-\-fix\-all\fR
 Apply every cleanup fix. Currently equivalent to \fB\-U\fR \fB\-H\fR; future

@@ -312,9 +312,70 @@ pub fn fix_unicode(name: &str) -> String {
     current
 }
 
+/// Block-level tags whose removal would otherwise weld two words together
+/// (`data<br>client`). Their names are matched case-insensitively; when such a
+/// tag is stripped it is replaced by a space so the slug pipeline turns it into
+/// a separator. `h1`..`h6` are handled separately by [`is_separator_tag`].
+const SEPARATOR_TAGS: &[&str] = &[
+    "br",
+    "p",
+    "div",
+    "li",
+    "ul",
+    "ol",
+    "dl",
+    "dt",
+    "dd",
+    "tr",
+    "td",
+    "th",
+    "table",
+    "thead",
+    "tbody",
+    "tfoot",
+    "hr",
+    "section",
+    "article",
+    "header",
+    "footer",
+    "nav",
+    "aside",
+    "main",
+    "figure",
+    "figcaption",
+    "blockquote",
+    "pre",
+    "address",
+    "form",
+    "fieldset",
+    "caption",
+];
+
+/// Does the content between `<` and `>` name a block-level tag that should be
+/// replaced by a space? Leading `/` (closing tag) is ignored; the tag name is
+/// read up to the first non-alphanumeric byte, then matched case-insensitively.
+fn is_separator_tag(content: &str) -> bool {
+    let name = content.strip_prefix('/').unwrap_or(content);
+    let end = name
+        .find(|c: char| !c.is_ascii_alphanumeric())
+        .unwrap_or(name.len());
+    let name = name[..end].to_ascii_lowercase();
+    // Headings `h1`..`h6`.
+    if let Some(rest) = name.strip_prefix('h') {
+        if rest.len() == 1 && matches!(rest.as_bytes()[0], b'1'..=b'6') {
+            return true;
+        }
+    }
+    SEPARATOR_TAGS.contains(&name.as_str())
+}
+
 /// Remove HTML/XML tags: a `<` immediately followed by an ASCII letter, `/`
 /// or `!` opens a tag that ends at the next `>`. Anything else (`a < b`, an
 /// unclosed `<tag`) is kept verbatim and left to the slug pipeline.
+///
+/// Block-level tags (`<br>`, `<p>`, `<h1>`…) are replaced by a space so the
+/// words around them stay separate; inline tags (`<b>`, `<i>`…) vanish with no
+/// gap (`client<b>s` → `clients`).
 fn strip_tags(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
@@ -327,6 +388,9 @@ fn strip_tags(s: &str) -> String {
         );
         if opens_tag {
             if let Some(end) = after.find('>') {
+                if is_separator_tag(&after[1..end]) {
+                    out.push(' ');
+                }
                 rest = &after[end + 1..];
                 continue;
             }

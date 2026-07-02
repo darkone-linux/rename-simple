@@ -139,7 +139,11 @@ $ rename-simple -A ~/Downloads/*
 correctly named (`café.jpg`) is never re-decoded, so the fix is safe to apply
 everywhere. Double mojibake (`CafÃƒÂ©`) is repaired too. `-H`/`--fix-html`
 strips tags and decodes named (`&eacute;`), decimal (`&#233;`) and hex
-(`&#xE9;`) entities. `-A`/`--fix-all` applies every cleanup fix.
+(`&#xE9;`) entities. Block-level tags (`<br>`, `<p>`, `<div>`, `<li>`,
+`<h1>`–`<h6>`, …) are replaced by a space so the surrounding words stay
+separated (`data<br>client` → `data-client`), while inline tags (`<b>`, `<i>`,
+`<span>`, …) vanish with no gap (`client<b>s` → `clients`). `-A`/`--fix-all`
+applies every cleanup fix.
 
 ### Verbose output
 

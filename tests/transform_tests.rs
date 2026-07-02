@@ -1155,10 +1155,27 @@ mod fix_html_tests {
     use super::*;
 
     #[test]
-    fn tags_are_stripped() {
+    fn inline_tags_are_stripped_without_a_gap() {
         assert_eq!(fix_html("<b>Hello</b> World"), "Hello World");
-        assert_eq!(fix_html("<h1>Title</h1>"), "Title");
-        assert_eq!(fix_html("a<br/>b"), "ab");
+        assert_eq!(fix_html("client<b>s"), "clients");
+    }
+
+    #[test]
+    fn block_tags_become_a_space() {
+        assert_eq!(fix_html("<h1>Title</h1>"), " Title ");
+        assert_eq!(fix_html("a<br/>b"), "a b");
+        assert_eq!(fix_html("a<br>b"), "a b");
+        assert_eq!(fix_html("un<p>deux"), "un deux");
+        assert_eq!(fix_html("a<h3>b"), "a b");
+        // The motivating example: block tag separates, inline tag welds.
+        let opts = CleanupOptions {
+            fix_html: true,
+            ..CleanupOptions::default()
+        };
+        assert_eq!(
+            transform_filename_with("données<br>client<b>s", opts),
+            "donnees-clients"
+        );
     }
 
     #[test]

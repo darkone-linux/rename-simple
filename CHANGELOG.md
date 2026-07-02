@@ -16,10 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   corrupted. Double/triple mojibake (`CafÃƒÂ©`) is repaired iteratively.
   New public `fix_unicode` function.
 - **`-H`/`--fix-html`**: strips HTML tags and decodes HTML entities before
-  renaming (`<b>Tom &amp; Jerry.mp4` → `tom-jerry.mp4`). Supports named
-  (`&eacute;`), decimal (`&#233;`) and hexadecimal (`&#xE9;`) entities;
-  anything that does not parse as a tag or entity is kept verbatim. New
-  public `fix_html` function.
+  renaming (`<b>Tom &amp; Jerry.mp4` → `tom-jerry.mp4`). Block-level tags
+  (`<br>`, `<p>`, `<div>`, `<li>`, `<h1>`–`<h6>`, …) are replaced by a space so
+  the surrounding words stay separated (`data<br>client` → `data-client`),
+  while inline tags (`<b>`, `<i>`, `<span>`, …) are removed with no gap
+  (`client<b>s` → `clients`). Supports named (`&eacute;`), decimal (`&#233;`)
+  and hexadecimal (`&#xE9;`) entities; anything that does not parse as a tag or
+  entity is kept verbatim. New public `fix_html` function.
 - **`-A`/`--fix-all`**: applies every cleanup fix (currently `-U` + `-H`);
   future cleanup passes will be folded into it. New public `CleanupOptions`
   struct and `transform_filename_with` / `transform_dirname_with` /
