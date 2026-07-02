@@ -25,7 +25,15 @@ tests/
 └── unix_tests.rs       # Unix-specific tests (symlinks, invalid UTF-8, perms)
 man/
 └── rename-simple.1     # Man page (kept in sync with the CLI manually)
-```
+
+## Man Page
+
+- **Version in `.TH` header** must match `Cargo.toml` version and today's date.
+  Update every time the CLI or docs change.
+- **Synopsis** must enumerate all short flags instead of a bare `[OPTIONS]`.
+- The **OPTIONS** section lists each flag with its short and long forms.
+- Every CLI behaviour documented in `README.md` must have a mirror entry in the
+  man page and vice‑versa — keep both in sync manually.
 
 ## Current Status
 
