@@ -591,21 +591,25 @@ pub fn transform_stem(stem: &str) -> String {
     trim_separators(&fixed)
 }
 
-/// Known compound extensions that must be kept together.
-/// Stored and matched in lowercase — add new ones here as needed.
-const DOUBLE_EXTENSIONS: &[&str] = &["tar.gz", "tar.bz2", "tar.xz", "tar.zst"];
+/// Known compound extensions that must be kept together, stored with their
+/// leading dot and in lowercase — matched case-insensitively. Add new ones here.
+const DOUBLE_EXTENSIONS: &[&str] = &[".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst"];
 
 /// Extract a compound extension if the filename ends with one of the known
 /// double extensions (case-insensitive), and return `(stem, ".compound.ext")`.
 /// Falls back to the standard single-extension split otherwise.
 fn split_extension(filename: &str) -> (&str, String) {
-    let lower = filename.to_ascii_lowercase();
-
-    for &double_ext in DOUBLE_EXTENSIONS {
-        let suffix = format!(".{double_ext}");
-        if lower.ends_with(&suffix) {
-            let stem = &filename[..filename.len() - suffix.len()];
-            return (stem, suffix);
+    // Match the known compound extensions case-insensitively by comparing the
+    // trailing bytes directly — no lowercased copy of the whole name and no
+    // per-iteration `format!`. A match implies the tail is pure ASCII, so
+    // `start` is always a valid char boundary for slicing `filename`.
+    let bytes = filename.as_bytes();
+    for &ext in DOUBLE_EXTENSIONS {
+        let Some(start) = bytes.len().checked_sub(ext.len()) else {
+            continue;
+        };
+        if bytes[start..].eq_ignore_ascii_case(ext.as_bytes()) {
+            return (&filename[..start], ext.to_owned());
         }
     }
 
