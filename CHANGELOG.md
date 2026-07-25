@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-07-25
+
+### Changed
+- Dependencies refreshed to their latest compatible versions (`cargo update`).
+- `split_extension` no longer allocates a lowercased copy of the whole filename
+  nor a per-extension format string on every call: the known compound
+  extensions (`.tar.gz`, …) are now matched by a case-insensitive comparison of
+  the trailing bytes. Behaviour is unchanged.
+
+### Added
+- Regression tests for the HTML entity decoder: the body-length cap
+  (`MAX_ENTITY_LEN`) and out-of-range / `u32`-overflowing numeric entities.
+
 ## [0.5.0] - 2026-07-02
 
 ### Added
