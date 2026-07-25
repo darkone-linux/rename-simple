@@ -1235,6 +1235,29 @@ mod fix_html_tests {
     }
 
     #[test]
+    fn over_long_entity_body_is_kept_verbatim() {
+        // The scanner only decodes an entity when the body (between `&` and `;`)
+        // is at most MAX_ENTITY_LEN (12) bytes. A numeric entity padded with
+        // leading zeros to exactly 12 bytes still decodes (0xE9 = 'é')...
+        let at_cap = format!("&#x{:010X};", 0xE9_u32); // body "#x00000000E9" = 12 bytes
+        assert_eq!(fix_html(&at_cap), "é");
+        // ...but one byte over the cap is left untouched even though its value
+        // would otherwise decode — the guard stops the search, not the value.
+        let over_cap = format!("&#x{:011X};", 0xE9_u32); // 13-byte body
+        assert_eq!(fix_html(&over_cap), over_cap);
+    }
+
+    #[test]
+    fn out_of_range_numeric_entity_is_kept_verbatim() {
+        // U+110000 is one past the highest Unicode scalar value; char::from_u32
+        // rejects it, so the entity is kept verbatim instead of emitting garbage.
+        assert_eq!(fix_html("&#x110000;"), "&#x110000;");
+        // A decimal code point that overflows u32 is likewise rejected (the
+        // radix parse fails before char conversion is even attempted).
+        assert_eq!(fix_html("&#4294967296;"), "&#4294967296;");
+    }
+
+    #[test]
     fn decoded_lt_does_not_create_a_new_tag() {
         // Tags are stripped before entities are decoded
         assert_eq!(fix_html("&lt;b&gt;text&lt;/b&gt;"), "<b>text</b>");
