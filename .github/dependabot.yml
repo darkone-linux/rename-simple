@@ -11,14 +11,16 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    # Only minor and patch are grouped, so major bumps still arrive as
+    # individual PRs — they are the ones that can break the MSRV floor or the
+    # build (cf. the syn 2 -> 3 jump). There is deliberately no `ignore` key:
+    # Dependabot's schema requires at least one entry, and an empty list would
+    # be a no-op anyway.
     groups:
       cargo-minor-patch:
         update-types:
           - minor
           - patch
-    # Major bumps stay individual: they are the ones that can break the MSRV
-    # floor or the build (cf. the syn 2 -> 3 jump).
-    ignore: []
 
   - package-ecosystem: github-actions
     directory: /
