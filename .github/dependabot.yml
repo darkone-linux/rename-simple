@@ -26,3 +26,20 @@ updates:
       interval: monthly
     commit-message:
       prefix: "chore(ci)"
+
+  # Nix flake inputs. Dependabot reads flake.lock and tracks input commits the
+  # way it tracks git submodules, opening one PR per outdated input — with a
+  # single `nixpkgs` input that means one PR. Version updates only; the nix
+  # ecosystem has no security-update support.
+  #
+  # Two things this does NOT cover, both still manual:
+  #   - refs pinned inside flake.nix itself (we pin none);
+  #   - the nixpkgs revision pinned in shell.nix, which is a fetchTarball and
+  #     not a flake input. That pin is deliberate — it keeps `nix develop` and
+  #     `nix-shell` on one toolchain — so bump it by hand, per shell.nix.
+  - package-ecosystem: nix
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(nix)"
