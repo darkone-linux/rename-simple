@@ -13,7 +13,20 @@ repository = "https://github.com/darkone-linux/rename-simple"
 readme = "README.md"
 keywords = ["rust", "cli", "rename"]
 categories = ["command-line-utilities"]
-exclude = ["assets/"]
+# Keep the published tarball to what a consumer needs: sources, tests, README,
+# CHANGELOG and the man page. Development tooling and agent instructions are
+# repo-only. The README references its screenshot by absolute raw.githubusercontent
+# URL, so `assets/` can stay excluded without breaking the crates.io rendering.
+exclude = [
+    ".envrc",
+    ".github/",
+    ".gitignore",
+    "AGENTS.md",
+    "Justfile",
+    "TECH-NOTES.md",
+    "assets/",
+    "shell.nix",
+]
 
 [[bin]]
 name = "rename-simple"

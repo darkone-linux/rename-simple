@@ -1,0 +1,28 @@
+version: 2
+
+updates:
+  # Cargo dependencies. Grouped into a single PR so the lockfile is refreshed in
+  # one reviewable change instead of one PR per crate; the CI quality gate plus
+  # the MSRV job decide whether the group is safe to merge.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      cargo-minor-patch:
+        update-types:
+          - minor
+          - patch
+    # Major bumps stay individual: they are the ones that can break the MSRV
+    # floor or the build (cf. the syn 2 -> 3 jump).
+    ignore: []
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(ci)"

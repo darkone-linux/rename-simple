@@ -7,7 +7,7 @@
 
 A small Rust CLI tool that renames files and directories to clean, ASCII-safe slugs.
 
-![rename-simple demo](assets/rename-simple.png)
+![rename-simple demo](https://raw.githubusercontent.com/darkone-linux/rename-simple/main/assets/rename-simple.png)
 
 > [!WARNING]
 > **Breaking change since 0.4.0.** The directory-scan mode and the
