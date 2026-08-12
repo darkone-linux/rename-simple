@@ -15,8 +15,11 @@ keywords = ["rust", "cli", "rename"]
 categories = ["command-line-utilities"]
 # Keep the published tarball to what a consumer needs: sources, tests, README,
 # CHANGELOG and the man page. Development tooling and agent instructions are
-# repo-only. The README references its screenshot by absolute raw.githubusercontent
-# URL, so `assets/` can stay excluded without breaking the crates.io rendering.
+# repo-only, and that includes the Nix packaging files: `flake.nix`,
+# `flake.lock` and `shell.nix` describe how to build and hack on the repo, not
+# how to consume the crate — Nix users take the flake from git, not crates.io.
+# The README references its screenshot by absolute raw.githubusercontent URL,
+# so `assets/` can stay excluded without breaking the crates.io rendering.
 exclude = [
     ".envrc",
     ".github/",
@@ -25,6 +28,8 @@ exclude = [
     "Justfile",
     "TECH-NOTES.md",
     "assets/",
+    "flake.lock",
+    "flake.nix",
     "shell.nix",
 ]
 
