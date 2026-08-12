@@ -94,17 +94,14 @@
       #------------------------------------------------------------------------
       #
       # Delegates to shell.nix so both `nix-shell` and `nix develop` see the
-      # same pinned toolchain.
+      # same pinned toolchain. Only `system` is passed: handing over this
+      # flake's `nixpkgs` as `pkgs` would silently override shell.nix's pinned
+      # revision, so `nix develop` would follow nixos-unstable while
+      # `nix-shell shell.nix` stayed on the pin.
 
-      devShells = forAllSystems (
-        system:
-        let
-          pkgs = nixpkgs.legacyPackages.${system};
-        in
-        {
-          default = import ./shell.nix { inherit pkgs; };
-        }
-      );
+      devShells = forAllSystems (system: {
+        default = import ./shell.nix { inherit system; };
+      });
 
     };
 }

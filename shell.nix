@@ -7,10 +7,17 @@
   # To update: bump `rev`, then run
   #   nix-prefetch-url --unpack https://github.com/NixOS/nixpkgs/archive/<rev>.tar.gz
   # and paste the printed hash into `sha256`.
+  #
+  # `system` is a parameter so flake.nix can select the target without having
+  # to supply its own `pkgs` — passing `pkgs` would override the pin above,
+  # which is precisely the drift this file exists to prevent. Under a flake,
+  # evaluation is pure and `builtins.currentSystem` is unavailable, hence the
+  # explicit argument.
+  system ? builtins.currentSystem,
   pkgs ? import (fetchTarball {
     url = "https://github.com/NixOS/nixpkgs/archive/c6d65881c5624c9cae5ea6cedef24699b0c0a4c0.tar.gz";
     sha256 = "1yf4qv3scjygdkg67nibrhbddg3154mv9cxffvykmwcrwfcrrlaq";
-  }) { },
+  }) { inherit system; },
 }:
 
 pkgs.mkShell {
