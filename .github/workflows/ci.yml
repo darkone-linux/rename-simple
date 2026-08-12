@@ -43,3 +43,22 @@ jobs:
       # a dev-dep raising its own floor must not fail the published MSRV.
       - name: Check build on MSRV
         run: cargo check --all-features --locked
+
+  nix:
+    name: Nix flake
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v6
+
+      # The installer enables flakes by default; pin the behaviour so a change
+      # of default cannot silently break this job.
+      - name: Enable flakes
+        run: echo "experimental-features = nix-command flakes" | sudo tee -a /etc/nix/nix.conf
+
+      # Kept in its own job so a failing quality gate still tells us whether the
+      # packaging derivation builds.
+      - name: Build flake package
+        run: nix build .#rename-simple
