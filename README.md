@@ -44,6 +44,18 @@ cargo install rename-simple
 cargo install --path .
 ```
 
+### With Nix
+
+The repository is a flake, so no Rust toolchain is needed:
+
+```bash
+# Run without installing
+nix run github:darkone-linux/rename-simple
+
+# Or install into your profile
+nix profile install github:darkone-linux/rename-simple
+```
+
 ## Usage
 
 ```

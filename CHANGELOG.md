@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-08-12
+
+No change to the renaming behaviour: this release is packaging and tooling. It
+is a minor rather than a patch because the declared minimum Rust version moves
+from 1.70 to 1.85.
+
+### Added
+- **Nix flake** (`flake.nix`): exposes `packages.<system>.{default,rename-simple}`,
+  `apps.<system>.default` for `nix run`, and `devShells.<system>.default`.
+  Supports `x86_64-linux` and `aarch64-linux`. The package is built from source
+  in the Nix sandbox with `rustPlatform.buildRustPackage`, replacing a
+  derivation that copied a host-built, dynamically linked binary into the store
+  and was therefore neither reproducible nor portable.
+- `LICENSE` file. The MIT license was declared in `Cargo.toml` and linked from
+  the README badge, but the text was absent from the repository and from the
+  published crate.
+- CI job checking the crate builds on the declared MSRV, reading `rust-version`
+  straight from `Cargo.toml` so the two can never disagree.
+- CI job building the Nix flake package.
+- Dependabot configuration for cargo, GitHub Actions and Nix flake inputs.
+
+### Changed
+- **Minimum supported Rust version raised from 1.70 to 1.85.** This documents
+  reality rather than dropping support: the locked `clap` and `assert_cmd`
+  already declared `rust-version = "1.85"`, so the crate could not build on
+  1.70–1.84. `resolver = "3"` was added so cargo honours the floor during
+  dependency resolution — the edition-2021 default resolver ignores
+  `rust-version`, which is why the mismatch went unnoticed.
+- Dependencies updated: 17 crates, including `clap` 4.6.1 → 4.6.6,
+  `regex` 1.12.4 → 1.13.1 and `syn` 2.0.118 → 3.0.3.
+- The published crate no longer ships development tooling (`Justfile`,
+  `shell.nix`, `.github/`, agent instructions and internal notes).
+- `just package nix` delegates to `nix build .#rename-simple`.
+
+### Fixed
+- The CI formatting gate ran `cargo fmt --all` in rewrite mode instead of
+  `--check`, so it always exited 0 and could never fail a build; the audit and
+  documentation steps were missing entirely. CI now invokes `just ci`, the same
+  gate used locally.
+- The README screenshot rendered as a broken image on crates.io: it was
+  referenced by relative path while `assets/` is excluded from the tarball. It
+  is now an absolute URL.
+- The Nix dev shell overrode the nixpkgs revision pinned in `shell.nix`, so
+  `nix develop` and `nix-shell` could drift apart. Both now resolve to the same
+  pinned toolchain.
+- The Nix package did not install the man page.
+
 ## [0.5.0] - 2026-07-02
 
 ### Added
