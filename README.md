@@ -1,7 +1,7 @@
 # rename-simple
 
 [![CI](https://github.com/darkone-linux/rename-simple/actions/workflows/ci.yml/badge.svg)](https://github.com/darkone-linux/rename-simple/actions/workflows/ci.yml)
-[![Rustc](https://img.shields.io/badge/rustc-1.70%2B-blue)](https://rust-lang.org)
+[![Rustc](https://img.shields.io/badge/rustc-1.85%2B-blue)](https://rust-lang.org)
 [![Version](https://img.shields.io/crates/v/rename-simple)](https://crates.io/crates/rename-simple)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](./LICENSE)
 
@@ -34,7 +34,7 @@ A small Rust CLI tool that renames files and directories to clean, ASCII-safe sl
 
 ## Installation
 
-Requires [Rust](https://www.rust-lang.org/tools/install) 1.70+.
+Requires [Rust](https://www.rust-lang.org/tools/install) 1.85+.
 
 ```bash
 # From crates.io

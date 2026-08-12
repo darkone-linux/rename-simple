@@ -8,6 +8,7 @@ on:
 
 jobs:
   test:
+    name: Quality gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,8 +16,30 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v6
 
-      - name: Run CI
+      # Delegate to `just ci` so the gate has a single definition. Spelling the
+      # steps out here is what let CI drift: it used to run `cargo fmt --all`
+      # (rewrite mode, always exit 0) and skipped audit and doc entirely.
+      - name: Run full quality gate
+        run: nix-shell shell.nix --run "just ci"
+
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Read the floor straight from Cargo.toml so this job can never disagree
+      # with the declared value.
+      - name: Read MSRV from Cargo.toml
+        id: msrv
         run: |
-          nix-shell shell.nix --run "cargo fmt --all"
-          nix-shell shell.nix --run "cargo clippy --all-targets --all-features -- -D warnings"
-          nix-shell shell.nix --run "cargo test"
+          echo "version=$(grep -m1 '^rust-version' Cargo.toml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+
+      # Check what a consumer actually builds (lib + bin), not dev-dependencies:
+      # a dev-dep raising its own floor must not fail the published MSRV.
+      - name: Check build on MSRV
+        run: cargo check --all-features --locked

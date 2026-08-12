@@ -2,7 +2,11 @@
 name = "rename-simple"
 version = "0.5.0"
 edition = "2021"
-rust-version = "1.70"
+# Floor imposed by the dependency graph: clap 4.6 and assert_cmd 2.2 both
+# declare rust-version = "1.85". Resolver v3 makes cargo honour this during
+# resolution instead of silently picking versions the floor cannot build.
+rust-version = "1.85"
+resolver = "3"
 description = "Rename files by normalizing accented characters, spaces and special chars to clean ASCII slugs"
 license = "MIT"
 repository = "https://github.com/darkone-linux/rename-simple"
