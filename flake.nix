@@ -55,6 +55,16 @@
             version = cargoToml.package.version;
             src = ./.;
             cargoLock.lockFile = ./Cargo.lock;
+
+            # buildRustPackage installs binaries only. The hand-rolled
+            # derivation this flake replaced also shipped the man page, so
+            # restore it here or `just package nix` silently regresses.
+            # Nix compresses man pages itself: install the uncompressed source.
+            postInstall = ''
+              install -Dm644 man/rename-simple.1 \
+                $out/share/man/man1/rename-simple.1
+            '';
+
             meta = {
               description = cargoToml.package.description;
               license = pkgs.lib.licenses.mit;
