@@ -14,7 +14,12 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v6
+        uses: DeterminateSystems/nix-installer-action@v22
+        with:
+          # v21 flipped this default to `true`, which swaps upstream Nix for
+          # Determinate Nix (separate EULA) and logs in to FlakeHub. Nothing
+          # here needs either, so keep installing what v6 installed.
+          determinate: false
 
       # Delegate to `just ci` so the gate has a single definition. Spelling the
       # steps out here is what let CI drift: it used to run `cargo fmt --all`
@@ -51,12 +56,15 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v6
-
-      # The installer enables flakes by default; pin the behaviour so a change
-      # of default cannot silently break this job.
-      - name: Enable flakes
-        run: echo "experimental-features = nix-command flakes" | sudo tee -a /etc/nix/nix.conf
+        uses: DeterminateSystems/nix-installer-action@v22
+        with:
+          # Same reason as the quality gate job: stay on upstream Nix.
+          determinate: false
+          # The installer enables flakes by default; pin the behaviour so a
+          # change of default cannot silently break this job. Written at install
+          # time rather than appended to /etc/nix/nix.conf afterwards, so the
+          # setting is in place before the first nix invocation.
+          extra-conf: experimental-features = nix-command flakes
 
       # Kept in its own job so a failing quality gate still tells us whether the
       # packaging derivation builds.
