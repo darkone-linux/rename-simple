@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-08-21
+
+Renaming behaviour is unchanged; what changes is what happens when the cleaned
+name is already taken. Such a clash was reported as a bare
+`File name already exists`, whatever sat at the destination — including the
+common case of a file already renamed on an earlier run, sitting next to an
+untouched copy of itself. The diagnostic now says which of the two situations
+it is, and the new `-D` flag clears the harmless one.
+
+### Added
+- `-D`/`--delete-duplicates`: when the source and the existing destination are
+  two regular files with byte-for-byte identical content, the rename would only
+  produce a copy of what is already there, so the redundant source is deleted
+  and reported as a warning (`[W] dir: source -> Identical duplicate, source
+  deleted`). Deliberately **not** implied by `-A`/`--fix-all`, which only
+  repairs names: deletion is the single irreversible operation of this program
+  and always requires an explicit flag. Under `--dry-run` the deletion is
+  announced, never performed.
+- `[W]` output category, on standard error like `[E]`, silenced by `-q`.
+  The summary gains a `N duplicates removed` segment, printed only when
+  non-zero so the usual one-line report is unchanged.
+- Public API: `compare_entries` and `EntryMatch` (`SameEntry`, `Identical`,
+  `Different`, `NotComparable`). Comparison is exact rather than digest-based:
+  entry identity first, then size, then a streamed byte-for-byte comparison, so
+  differing files bail out on the first divergent block, no file is ever fully
+  loaded in memory, and no hash collision can be mistaken for equality.
+
+### Changed
+- A name clash between two regular files with differing content now reports
+  `File name already exists (2 different files)`. When the contents are
+  identical, the error names the flag that would clear it:
+  `File name already exists (identical duplicate, use -D to delete the source)`.
+  Both remain errors and touch nothing; the exit status is unchanged.
+- Two names for the same entry (hard link, symlink to the destination, or a
+  case-insensitive filesystem folding both names together) keep the plain
+  `File name already exists` and are never deduplicated, with or without `-D`:
+  deleting the source there would destroy the last copy rather than a duplicate.
+  Directories, and any other non-regular entry, are never compared nor deleted.
+
 ## [0.6.0] - 2026-08-12
 
 No change to the renaming behaviour: this release is packaging and tooling. It

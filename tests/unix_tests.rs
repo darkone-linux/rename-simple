@@ -157,3 +157,52 @@ fn test_invalid_utf8_filename_does_not_panic() {
         "valid neighbours must still be renamed"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Duplicate handling
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_hard_link_to_destination_is_not_deleted() {
+    // Source and destination are two names for the *same* inode: deleting the
+    // source would be a rename in disguise, so it must stay a plain error.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("cafe.txt"), "shared").unwrap();
+    fs::hard_link(dir.join("cafe.txt"), dir.join("Café.txt")).unwrap();
+
+    let output = cmd().arg("-D").arg(dir.join("Café.txt")).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("Café.txt").exists(), "hard link must stay");
+    assert!(dir.join("cafe.txt").exists(), "destination must stay");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[E]"),
+        "expected an [E] line, got: {stderr}"
+    );
+    assert!(!stderr.contains("[W]"));
+}
+
+#[test]
+fn test_symlink_duplicate_of_its_own_target_is_not_deleted() {
+    // A symlink whose cleaned name points at its own target resolves to the
+    // same inode: same-entry detection must win over content comparison.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("cafe.txt"), "shared").unwrap();
+    std::os::unix::fs::symlink("cafe.txt", dir.join("Café.txt")).unwrap();
+
+    let output = cmd().arg("-D").arg(dir.join("Café.txt")).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("Café.txt").exists(), "symlink must stay");
+    assert_eq!(fs::read_to_string(dir.join("cafe.txt")).unwrap(), "shared");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[E]"),
+        "expected an [E] line, got: {stderr}"
+    );
+}

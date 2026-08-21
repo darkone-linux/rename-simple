@@ -873,3 +873,210 @@ fn test_cleanup_flags_combine_with_dry_run() {
     );
     assert!(dir.join("CafÃ©.txt").exists(), "dry-run must not rename");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Duplicate handling
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_identical_duplicate_source_is_deleted() {
+    // The destination already exists but holds exactly the same bytes: the
+    // source is a strict duplicate and gets removed instead of erroring out.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("Café.txt"), "same bytes").unwrap();
+    fs::write(dir.join("cafe.txt"), "same bytes").unwrap();
+
+    let output = cmd().arg("-D").arg(dir.join("Café.txt")).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(
+        !dir.join("Café.txt").exists(),
+        "the duplicate source must be deleted"
+    );
+    assert_eq!(
+        fs::read_to_string(dir.join("cafe.txt")).unwrap(),
+        "same bytes",
+        "the destination must be left untouched"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("[W]"), "expected a [W] line, got: {stderr}");
+    assert!(
+        !stderr.contains("[E]"),
+        "a strict duplicate is not an error: {stderr}"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("1 duplicate removed"),
+        "expected the duplicate count in the summary, got: {stdout}"
+    );
+}
+
+#[test]
+fn test_identical_empty_files_are_duplicates() {
+    // Zero-length files compare equal: the size fast-path must not mistake
+    // "nothing to read" for "contents differ".
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("Vide Test.txt"), "").unwrap();
+    fs::write(dir.join("vide-test.txt"), "").unwrap();
+
+    let output = cmd()
+        .arg("-D")
+        .arg(dir.join("Vide Test.txt"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(!dir.join("Vide Test.txt").exists());
+    assert!(dir.join("vide-test.txt").exists());
+}
+
+#[test]
+fn test_same_size_different_content_is_an_error() {
+    // Same length, different bytes: the comparison must go past the size
+    // fast-path and keep both files.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("Café.txt"), "aaaa").unwrap();
+    fs::write(dir.join("cafe.txt"), "bbbb").unwrap();
+
+    let output = cmd().arg("-D").arg(dir.join("Café.txt")).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("Café.txt").exists(), "source must stay put");
+    assert_eq!(fs::read_to_string(dir.join("cafe.txt")).unwrap(), "bbbb");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[E]"),
+        "expected an [E] line, got: {stderr}"
+    );
+    assert!(!stderr.contains("[W]"));
+}
+
+#[test]
+fn test_duplicate_dry_run_keeps_source() {
+    // -n must not delete anything, only announce what it would do.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("Café.txt"), "same bytes").unwrap();
+    fs::write(dir.join("cafe.txt"), "same bytes").unwrap();
+
+    let output = cmd().arg("-nD").arg(dir.join("Café.txt")).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(
+        dir.join("Café.txt").exists(),
+        "dry-run must keep the duplicate source"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("[W]"), "expected a [W] line, got: {stderr}");
+}
+
+#[test]
+fn test_duplicate_stays_silent_under_quiet() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("Café.txt"), "same bytes").unwrap();
+    fs::write(dir.join("cafe.txt"), "same bytes").unwrap();
+
+    let output = cmd().arg("-qD").arg(dir.join("Café.txt")).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty() && output.stderr.is_empty());
+    assert!(
+        !dir.join("Café.txt").exists(),
+        "-q still deletes duplicates"
+    );
+}
+
+#[test]
+fn test_directory_destination_is_never_deleted() {
+    // Directories are not comparable byte for byte: an existing directory at
+    // the destination stays a plain error, whatever it contains.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::create_dir(dir.join("Mon Dossier")).unwrap();
+    fs::create_dir(dir.join("mon-dossier")).unwrap();
+
+    let output = cmd()
+        .arg("-D")
+        .arg(dir.join("Mon Dossier"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("Mon Dossier").exists(), "source dir must stay");
+    assert!(dir.join("mon-dossier").exists(), "target dir must stay");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[E]"),
+        "expected an [E] line, got: {stderr}"
+    );
+}
+
+#[test]
+fn test_duplicate_needs_the_flag_to_be_deleted() {
+    // Without -D the strict duplicate is only reported: nothing is deleted,
+    // and the message names the flag that would clear the clash.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("Café.txt"), "same bytes").unwrap();
+    fs::write(dir.join("cafe.txt"), "same bytes").unwrap();
+
+    let output = cmd().arg(dir.join("Café.txt")).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(
+        dir.join("Café.txt").exists(),
+        "no deletion without an explicit -D"
+    );
+    assert!(dir.join("cafe.txt").exists());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[E]"),
+        "expected an [E] line, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("identical duplicate") && stderr.contains("-D"),
+        "the error should point at -D, got: {stderr}"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !stdout.contains("duplicate removed"),
+        "nothing was removed: {stdout}"
+    );
+}
+
+#[test]
+fn test_fix_all_does_not_delete_duplicates() {
+    // -A is a name-repair shortcut only: it must never imply -D.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("CafÃ©.txt"), "same bytes").unwrap();
+    fs::write(dir.join("cafe.txt"), "same bytes").unwrap();
+
+    let output = cmd().arg("-A").arg(dir.join("CafÃ©.txt")).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(
+        dir.join("CafÃ©.txt").exists(),
+        "-A must not delete anything"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[E]"),
+        "expected an [E] line, got: {stderr}"
+    );
+}

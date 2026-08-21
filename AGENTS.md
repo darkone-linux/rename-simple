@@ -60,16 +60,17 @@ Arguments:
   [files]...  Entries to rename (files and/or directories)
 
 Options:
-  -f, --files-only   Rename files only
-  -d, --dirs-only    Rename directories only
-  -U, --fix-unicode  Repair mojibake (UTF-8 wrongly decoded as Latin-1/CP1252) before renaming
-  -H, --fix-html     Strip HTML tags and decode HTML entities before renaming
-  -A, --fix-all      Apply every cleanup fix (currently equivalent to -U -H)
-  -q, --quiet        Print nothing at all
-  -v, --verbose      Show every entry, including the ones left untouched
-  -n, --dry-run      Show what would be renamed without touching any entry
-  -h, --help         Print help
-  -V, --version      Print version
+  -f, --files-only         Rename files only
+  -d, --dirs-only          Rename directories only
+  -U, --fix-unicode        Repair mojibake (UTF-8 wrongly decoded as Latin-1/CP1252) before renaming
+  -H, --fix-html           Strip HTML tags and decode HTML entities before renaming
+  -A, --fix-all            Apply every cleanup fix (currently equivalent to -U -H)
+  -D, --delete-duplicates  Delete a source that is a byte-for-byte duplicate of an existing destination
+  -q, --quiet              Print nothing at all
+  -v, --verbose            Show every entry, including the ones left untouched
+  -n, --dry-run            Show what would be renamed without touching any entry
+  -h, --help               Print help
+  -V, --version            Print version
 ```
 
 Each argument is renamed itself (`rename`(1)-like); without `-f`/`-d` both files
@@ -81,6 +82,7 @@ Default: no output; details only with `-v`.
 
 - **Conflict detection**: Multiple files that would rename to the same destination are skipped with a warning.
 - **Existing destination**: Files that already exist at the target path are skipped with a warning.
+- **Strict duplicates**: When source and destination are two regular files with byte-for-byte identical content, `-D` deletes the source (`[W]`); without `-D` the clash stays an error naming the flag. Never implied by `-A`.
 - **Hidden files**: Files starting with `.` are ignored.
 - **IO errors**: Reported per-file with error count in summary.
 

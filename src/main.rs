@@ -1,5 +1,8 @@
 use clap::{CommandFactory, Parser};
-use rename_files::{plan_entry_with, CleanupOptions, RenameOp, RenamePlan, RenameTarget};
+use rename_files::{
+    compare_entries, plan_entry_with, CleanupOptions, EntryMatch, RenameOp, RenamePlan,
+    RenameTarget,
+};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::IsTerminal;
@@ -62,6 +65,11 @@ struct Cli {
     #[arg(short = 'A', long = "fix-all")]
     fix_all: bool,
 
+    /// Delete a source that is a byte-for-byte duplicate of an existing
+    /// destination, instead of reporting the name clash as an error
+    #[arg(short = 'D', long = "delete-duplicates")]
+    delete_duplicates: bool,
+
     /// Print nothing at all
     #[arg(short = 'q', long, conflicts_with = "verbose")]
     quiet: bool,
@@ -94,6 +102,8 @@ enum Verbosity {
 
 struct Config {
     dry_run: bool,
+    /// `-D`: delete a source that strictly duplicates its destination.
+    delete_duplicates: bool,
     target: RenameTarget,
     cleanup: CleanupOptions,
 }
@@ -136,6 +146,7 @@ fn verbosity_from(cli: &Cli) -> Verbosity {
 
 const MAGENTA: &str = "\x1b[35m";
 const RED: &str = "\x1b[31m";
+const YELLOW: &str = "\x1b[33m";
 const GREEN: &str = "\x1b[32m";
 const GREY: &str = "\x1b[90m";
 const RESET: &str = "\x1b[0m";
@@ -156,6 +167,15 @@ fn plural_entries(n: usize) -> &'static str {
         "entries"
     } else {
         "entry"
+    }
+}
+
+/// "duplicate" for 0 or 1, "duplicates" for more than one.
+fn plural_duplicates(n: usize) -> &'static str {
+    if n > 1 {
+        "duplicates"
+    } else {
+        "duplicate"
     }
 }
 
@@ -185,6 +205,7 @@ struct Reporter {
     stdout_tty: bool,
     stderr_tty: bool,
     renamed: usize,
+    duplicates: usize,
     errors: usize,
     skipped: usize,
 }
@@ -196,6 +217,7 @@ impl Reporter {
             stdout_tty: std::io::stdout().is_terminal(),
             stderr_tty: std::io::stderr().is_terminal(),
             renamed: 0,
+            duplicates: 0,
             errors: 0,
             skipped: 0,
         }
@@ -213,6 +235,21 @@ impl Reporter {
         let name = display_name(from);
         let arrow = paint(self.stdout_tty, MAGENTA, "->");
         println!("[{mark}] {loc} {name} {arrow} {to}");
+    }
+
+    /// Report a source dropped because it duplicates its destination:
+    /// `[W] dir: source -> message`. A warning, not an error: the wanted name
+    /// is already there, holding the very same bytes.
+    fn duplicate(&mut self, source: &Path, message: &str) {
+        self.duplicates += 1;
+        if self.verbosity == Verbosity::Quiet {
+            return;
+        }
+        let mark = paint(self.stderr_tty, YELLOW, "W");
+        let loc = location(source, self.stderr_tty);
+        let name = display_name(source);
+        let arrow = paint(self.stderr_tty, YELLOW, "->");
+        eprintln!("[{mark}] {loc} {name} {arrow} {message}");
     }
 
     /// Report a per-entry error: `[E] dir: source -> message`.
@@ -246,12 +283,23 @@ impl Reporter {
         if self.verbosity == Verbosity::Quiet {
             return;
         }
-        let matched = self.renamed + self.errors + self.skipped;
+        let matched = self.renamed + self.duplicates + self.errors + self.skipped;
         let matched_word = plural_entries(matched);
         let renamed_word = plural_entries(self.renamed);
         let errors_word = plural_errors(self.errors);
+        // The duplicate segment only shows up when there is something to say,
+        // keeping the usual summary as short as it has always been.
+        let duplicates = if self.duplicates > 0 {
+            format!(
+                ", {} {} removed",
+                self.duplicates,
+                plural_duplicates(self.duplicates)
+            )
+        } else {
+            String::new()
+        };
         println!(
-            "{matched} {matched_word} matched, {} {renamed_word} renamed, {} {errors_word}.",
+            "{matched} {matched_word} matched, {} {renamed_word} renamed{duplicates}, {} {errors_word}.",
             self.renamed, self.errors
         );
     }
@@ -262,8 +310,12 @@ impl Reporter {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Return ops that are safe to apply (no destination conflicts).
-/// Conflicting ops are reported as errors and dropped.
-fn filter_conflicts(ops: Vec<RenameOp>, reporter: &mut Reporter) -> Vec<RenameOp> {
+/// Conflicting ops are reported and dropped.
+///
+/// An already existing destination is an error, except under `-D` when it is a
+/// strict duplicate of the source (see `resolve_existing`), in which case the
+/// source is deleted instead.
+fn filter_conflicts(ops: Vec<RenameOp>, config: &Config, reporter: &mut Reporter) -> Vec<RenameOp> {
     let mut dest_count: HashMap<PathBuf, usize> = HashMap::new();
     for op in &ops {
         *dest_count.entry(op.to.clone()).or_insert(0) += 1;
@@ -274,12 +326,47 @@ fn filter_conflicts(ops: Vec<RenameOp>, reporter: &mut Reporter) -> Vec<RenameOp
         if dest_count[&op.to] > 1 {
             reporter.error(&op.from, "Multiple entries would produce this name");
         } else if op.to.exists() {
-            reporter.error(&op.from, "File name already exists");
+            resolve_existing(&op, config, reporter);
         } else {
             safe.push(op);
         }
     }
     safe
+}
+
+/// Decide what to do with an op whose destination is already taken. Nothing is
+/// ever overwritten, and nothing is ever deleted without `-D`.
+///
+/// When both sides are regular files with byte-for-byte identical content the
+/// rename would only produce a copy of what is already there: the source is a
+/// redundant duplicate, deleted under `-D` (or, with `--dry-run`, merely
+/// announced) and otherwise reported as an error naming the flag that would
+/// clear it. Everything else — differing content, directories, two names for
+/// the same entry — stays a plain error and touches nothing.
+fn resolve_existing(op: &RenameOp, config: &Config, reporter: &mut Reporter) {
+    match compare_entries(&op.from, &op.to) {
+        Ok(EntryMatch::Identical) => {
+            if !config.delete_duplicates {
+                reporter.error(
+                    &op.from,
+                    "File name already exists (identical duplicate, use -D to delete the source)",
+                );
+            } else if config.dry_run {
+                reporter.duplicate(&op.from, "Identical duplicate, source would be deleted");
+            } else if let Err(e) = std::fs::remove_file(&op.from) {
+                reporter.error(&op.from, &e.to_string());
+            } else {
+                reporter.duplicate(&op.from, "Identical duplicate, source deleted");
+            }
+        }
+        Ok(EntryMatch::Different) => {
+            reporter.error(&op.from, "File name already exists (2 different files)");
+        }
+        Ok(EntryMatch::SameEntry | EntryMatch::NotComparable) => {
+            reporter.error(&op.from, "File name already exists");
+        }
+        Err(e) => reporter.error(&op.from, &format!("File name already exists ({e})")),
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -354,7 +441,7 @@ fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) 
     // that files and leaf directories are renamed before the directories that
     // contain them. Otherwise renaming a parent first would invalidate the
     // stored child paths and make their renames fail with ENOENT.
-    let mut ops = filter_conflicts(ops, reporter);
+    let mut ops = filter_conflicts(ops, config, reporter);
     ops.sort_by_key(|op| std::cmp::Reverse(op.from.components().count()));
     apply_ops(&ops, config.dry_run, reporter);
 }
@@ -377,6 +464,7 @@ fn main() {
 
     let config = Config {
         dry_run: cli.dry_run,
+        delete_duplicates: cli.delete_duplicates,
         target: target_from(&cli),
         cleanup: cleanup_from(&cli),
     };

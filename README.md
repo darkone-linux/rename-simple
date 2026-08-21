@@ -30,6 +30,7 @@ A small Rust CLI tool that renames files and directories to clean, ASCII-safe sl
 - Keeps extensions separate only when they are ASCII alphanumeric and ≤10 characters
   (e.g. `.tét` → absorbed as `-tet`; `.abcdefghijkl` (12 chars) → absorbed as `-abcdefghijkl`)
 - Skips hidden files (`.gitignore`, `.DS_Store`…) and flags naming conflicts
+- Optionally (`-D`) deletes a source that is a byte-for-byte duplicate of an already existing target
 - Optional cleanup fixes: repairs mojibake (`-U`), strips HTML tags and entities (`-H`), or both (`-A`)
 
 ## Installation
@@ -76,6 +77,7 @@ arguments, `rename-simple` prints this help.
 | `-U`, `--fix-unicode` | Repair mojibake (UTF-8 misread as Latin-1/CP1252) before renaming |
 | `-H`, `--fix-html` | Strip HTML tags and decode HTML entities before renaming |
 | `-A`, `--fix-all` | Apply every cleanup fix (currently `-U` + `-H`) |
+| `-D`, `--delete-duplicates` | Delete a source that is a byte-for-byte duplicate of an existing target |
 | `-n`, `--dry-run` | Preview renames without touching any file |
 | `-q`, `--quiet` | Print nothing at all |
 | `-v`, `--verbose` | Show details of each rename |
@@ -156,6 +158,42 @@ strips tags and decodes named (`&eacute;`), decimal (`&#233;`) and hex
 separated (`data<br>client` → `data-client`), while inline tags (`<b>`, `<i>`,
 `<span>`, …) vanish with no gap (`client<b>s` → `clients`). `-A`/`--fix-all`
 applies every cleanup fix.
+
+### Conflicts and duplicates
+
+When the cleaned name is already taken, the source is never overwritten and the
+clash is reported. The message tells you whether the two entries hold the same
+bytes:
+
+```bash
+$ rename-simple *
+```
+
+```
+[E] .: IMG 9572.mov -> File name already exists (identical duplicate, use -D to delete the source)
+[E] .: VID 20260819.mp4 -> File name already exists (2 different files)
+```
+
+`-D`/`--delete-duplicates` acts on the first case: when source and target are
+two regular files with **strictly identical** content (compared byte for byte,
+not by name or size), the rename would only produce a copy of what is already
+there, so the redundant source is deleted:
+
+```bash
+$ rename-simple -D *
+```
+
+```
+[W] .: IMG 9572.mov -> Identical duplicate, source deleted
+[E] .: VID 20260819.mp4 -> File name already exists (2 different files)
+4 entries matched, 0 entry renamed, 1 duplicate removed, 1 error.
+```
+
+Nothing is ever deleted without `-D`, and `-A`/`--fix-all` does **not** imply
+it: `-A` only repairs names. `-D` combined with `--dry-run` announces the
+deletion without performing it. Everything else stays an error and is left
+untouched: differing content, a directory, or two names for the same entry
+(hard link, symlink).
 
 ### Verbose output
 

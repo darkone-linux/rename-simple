@@ -1,3 +1,5 @@
+use std::fs;
+use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use unicode_normalization::char::is_combining_mark;
 use unicode_normalization::UnicodeNormalization;
@@ -697,6 +699,95 @@ pub fn transform_dirname_with(name: &str, opts: CleanupOptions) -> String {
         return "unnamed".to_owned();
     }
     new_name
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Duplicate detection
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Outcome of comparing a rename source with an already existing destination.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntryMatch {
+    /// Both paths resolve to the very same filesystem entry (a hard link, a
+    /// symlink to the other one, or a case-insensitive filesystem folding the
+    /// two names together). Removing either one could destroy the last copy,
+    /// so callers must treat this as a conflict, never as a duplicate.
+    SameEntry,
+    /// Two distinct regular files with byte-for-byte identical content.
+    Identical,
+    /// Two distinct regular files whose contents differ.
+    Different,
+    /// At least one path is not a regular file (directory, socket, fifo…):
+    /// there is nothing to compare byte for byte.
+    NotComparable,
+}
+
+/// Compare two existing paths to decide whether one is a strict duplicate of
+/// the other.
+///
+/// Symlinks are followed, so what is compared is the content they resolve to.
+/// Files are compared by identity first, then by size, then chunk by chunk:
+/// differing files bail out early and no whole-file digest is ever computed,
+/// which makes an exact answer cheaper than hashing both sides.
+pub fn compare_entries(a: &Path, b: &Path) -> io::Result<EntryMatch> {
+    let (meta_a, meta_b) = (fs::metadata(a)?, fs::metadata(b)?);
+
+    if is_same_entry(&meta_a, &meta_b) {
+        return Ok(EntryMatch::SameEntry);
+    }
+    if !meta_a.is_file() || !meta_b.is_file() {
+        return Ok(EntryMatch::NotComparable);
+    }
+    if meta_a.len() != meta_b.len() {
+        return Ok(EntryMatch::Different);
+    }
+    if contents_equal(a, b)? {
+        Ok(EntryMatch::Identical)
+    } else {
+        Ok(EntryMatch::Different)
+    }
+}
+
+/// Whether two metadata snapshots describe the same filesystem entry.
+///
+/// Unix compares the `(device, inode)` pair. Elsewhere there is no portable
+/// identity to compare, so the check stays conservative and answers `false`;
+/// the content comparison then decides.
+#[cfg(unix)]
+fn is_same_entry(a: &fs::Metadata, b: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    a.dev() == b.dev() && a.ino() == b.ino()
+}
+
+#[cfg(not(unix))]
+fn is_same_entry(_a: &fs::Metadata, _b: &fs::Metadata) -> bool {
+    false
+}
+
+/// Byte-for-byte comparison of two files, streamed through the reader buffers
+/// so neither file is ever fully loaded in memory.
+fn contents_equal(a: &Path, b: &Path) -> io::Result<bool> {
+    let mut reader_a = BufReader::new(fs::File::open(a)?);
+    let mut reader_b = BufReader::new(fs::File::open(b)?);
+
+    loop {
+        let buf_a = reader_a.fill_buf()?;
+        let buf_b = reader_b.fill_buf()?;
+
+        // End of file on either side: equal only if both ended together.
+        if buf_a.is_empty() || buf_b.is_empty() {
+            return Ok(buf_a.is_empty() && buf_b.is_empty());
+        }
+
+        // The two buffers rarely hold the same amount of data; compare the
+        // common prefix and consume exactly that much on both sides.
+        let len = buf_a.len().min(buf_b.len());
+        if buf_a[..len] != buf_b[..len] {
+            return Ok(false);
+        }
+        reader_a.consume(len);
+        reader_b.consume(len);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
