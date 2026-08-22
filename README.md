@@ -30,7 +30,7 @@ A small Rust CLI tool that renames files and directories to clean, ASCII-safe sl
 - Keeps extensions separate only when they are ASCII alphanumeric and ≤10 characters
   (e.g. `.tét` → absorbed as `-tet`; `.abcdefghijkl` (12 chars) → absorbed as `-abcdefghijkl`)
 - Skips hidden files (`.gitignore`, `.DS_Store`…) and flags naming conflicts
-- Optionally (`-D`) deletes a source that is a byte-for-byte duplicate of an already existing target
+- Optionally (`-D`) deletes a source file that is a byte-for-byte duplicate of an already existing target
 - Optional cleanup fixes: repairs mojibake (`-U`), strips HTML tags and entities (`-H`), or both (`-A`)
 
 ## Installation
@@ -193,7 +193,12 @@ Nothing is ever deleted without `-D`, and `-A`/`--fix-all` does **not** imply
 it: `-A` only repairs names. `-D` combined with `--dry-run` announces the
 deletion without performing it. Everything else stays an error and is left
 untouched: differing content, a directory, or two names for the same entry
-(hard link, symlink).
+(hard link, case-insensitive filesystem).
+
+Symlinks are left out of the comparison entirely — neither side may be one.
+A link is not a redundant copy of the bytes it points at, and content reached
+through a symlinked target lives outside the directory being cleaned up:
+deleting the source there would drop the last real copy.
 
 ### Verbose output
 

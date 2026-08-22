@@ -206,3 +206,105 @@ fn test_symlink_duplicate_of_its_own_target_is_not_deleted() {
         "expected an [E] line, got: {stderr}"
     );
 }
+
+#[test]
+fn test_symlink_source_is_never_deleted_as_duplicate() {
+    // The source is a symlink to a third file whose content happens to match
+    // the destination. A symlink is not a redundant copy of anything: deleting
+    // it destroys a link the user created, and the rename it stands in for
+    // would have moved the link, not duplicated the bytes.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("real.txt"), "CONTENT").unwrap();
+    std::os::unix::fs::symlink("real.txt", dir.join("Café.txt")).unwrap();
+    fs::write(dir.join("cafe.txt"), "CONTENT").unwrap();
+
+    let output = cmd().arg("-D").arg(dir.join("Café.txt")).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(
+        dir.join("Café.txt").symlink_metadata().is_ok(),
+        "the symlink must survive"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[E]"),
+        "expected an [E] line, got: {stderr}"
+    );
+    assert!(!stderr.contains("[W]"), "nothing may be deleted here");
+}
+
+#[test]
+fn test_symlinked_destination_never_deletes_the_source() {
+    // The destination name is a symlink pointing outside the operation. Its
+    // content matches, but deleting the source would leave the last *real*
+    // copy of those bytes outside the directory being cleaned up — one
+    // `rm elsewhere.txt` away from being lost for good.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("elsewhere.txt"), "CONTENT").unwrap();
+    std::os::unix::fs::symlink("elsewhere.txt", dir.join("cafe.txt")).unwrap();
+    fs::write(dir.join("Café.txt"), "CONTENT").unwrap();
+
+    let output = cmd().arg("-D").arg(dir.join("Café.txt")).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(
+        dir.join("Café.txt").exists(),
+        "the only real copy must survive"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[E]"),
+        "expected an [E] line, got: {stderr}"
+    );
+    assert!(!stderr.contains("[W]"), "nothing may be deleted here");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reporting of names that cannot be processed
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_invalid_utf8_name_is_reported() {
+    // An entry named explicitly on the command line must never vanish without
+    // a word: it cannot be renamed, so it is reported as an error.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    let bad_path = dir.join(OsStr::from_bytes(&[
+        b'b', b'a', b'd', 0xff, b'.', b't', b'x', b't',
+    ]));
+    fs::write(&bad_path, "x").unwrap();
+
+    let output = cmd().arg(&bad_path).output().unwrap();
+
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[E]") && stderr.contains("UTF-8"),
+        "expected an [E] line about UTF-8, got: {stderr}"
+    );
+    assert!(bad_path.exists(), "the entry itself must be left alone");
+}
+
+#[test]
+fn test_type_filter_stays_silent_on_invalid_utf8() {
+    // Filtered out by -d: the invalid name is irrelevant, so it must not be
+    // reported as an error.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    let bad_path = dir.join(OsStr::from_bytes(&[
+        b'b', b'a', b'd', 0xff, b'.', b't', b'x', b't',
+    ]));
+    fs::write(&bad_path, "x").unwrap();
+
+    let output = cmd().arg("-d").arg(&bad_path).output().unwrap();
+
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.is_empty(), "expected no output, got: {stderr}");
+}

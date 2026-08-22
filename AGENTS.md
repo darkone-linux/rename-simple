@@ -83,6 +83,8 @@ Default: no output; details only with `-v`.
 - **Conflict detection**: Multiple files that would rename to the same destination are skipped with a warning.
 - **Existing destination**: Files that already exist at the target path are skipped with a warning.
 - **Strict duplicates**: When source and destination are two regular files with byte-for-byte identical content, `-D` deletes the source (`[W]`); without `-D` the clash stays an error naming the flag. Never implied by `-A`.
+- **Symlinks**: Excluded from duplicate detection (`symlink_metadata`, never followed) — a link is not a copy, and a symlinked destination points outside the operation.
+- **Invalid UTF-8**: Names that are not valid UTF-8 cannot be transformed; reported as an error, entry left untouched.
 - **Hidden files**: Files starting with `.` are ignored.
 - **IO errors**: Reported per-file with error count in summary.
 

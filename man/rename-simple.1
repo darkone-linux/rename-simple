@@ -1,4 +1,4 @@
-.TH RENAME-SIMPLE 1 "2026-08-21" "rename-simple 0.7.0" "User Commands"
+.TH RENAME-SIMPLE 1 "2026-08-22" "rename-simple 0.7.1" "User Commands"
 .SH NAME
 rename-simple \- clean filenames to lowercase, ASCII-safe slugs
 .SH SYNOPSIS
@@ -59,7 +59,9 @@ long. Extensions containing accents, spaces, punctuation or exceeding 10
 characters are re-absorbed into the filename stem and processed through the
 full transliteration pipeline.
 .PP
-Hidden files (names starting with a dot) are never modified.
+Hidden files (names starting with a dot) are never modified. An entry whose
+name is not valid UTF-8 cannot be transformed and is reported as an error
+(\fB[E]\fR), leaving it untouched.
 .PP
 An existing destination is never overwritten, and no entry is ever deleted
 without \fB\-D\fR. When the cleaned name is already taken, the source and the
@@ -68,9 +70,9 @@ destination are compared and the conflict is reported as an error
 \fBstrictly identical\fR content (compared byte for byte), the rename would
 merely duplicate what is already there: \fB\-D\fR/\fB\-\-delete\-duplicates\fR
 then deletes the redundant source and reports it as a warning (\fB[W]\fR).
-Every other conflict (differing content, a directory, or two names for the same
-entry such as a hard link) leaves both sides untouched, with or without
-\fB\-D\fR. Under \fB\-n\fR/\fB\-\-dry\-run\fR the duplicate is only announced,
+Every other conflict leaves both sides untouched, with or without \fB\-D\fR:
+differing content, a directory, a symlink on either side, or two names for the
+same entry such as a hard link. Under \fB\-n\fR/\fB\-\-dry\-run\fR the duplicate is only announced,
 never deleted.
 .PP
 By default the program prints one line per renamed entry (\fB[R]\fR), deleted
@@ -117,8 +119,10 @@ Show every entry, including the ones left untouched, plus the summary.
 \fB\-D\fR, \fB\-\-delete\-duplicates\fR
 Delete a source that is a byte\-for\-byte duplicate of an already existing
 destination, instead of reporting the name clash as an error. Only applies to
-two distinct regular files with strictly identical content; it is \fBnot\fR
-implied by \fB\-A\fR/\fB\-\-fix\-all\fR, which only repairs names.
+two distinct regular files with strictly identical content: symlinks are
+neither followed nor deleted, since a link is not a copy of the bytes it points
+at. It is \fBnot\fR implied by \fB\-A\fR/\fB\-\-fix\-all\fR, which only repairs
+names.
 .TP
 \fB\-n\fR, \fB\-\-dry\-run\fR
 Show what would be renamed without actually renaming any entry.

@@ -417,6 +417,23 @@ fn apply_ops(ops: &[RenameOp], dry_run: bool, reporter: &mut Reporter) {
     }
 }
 
+/// Whether an entry passes the `-f` / `-d` type filter. Mirrors the check in
+/// `plan_entry_with`, which folds "filtered out" and "unusable name" into a
+/// single `Excluded` outcome.
+fn matches_target(path: &Path, target: RenameTarget) -> bool {
+    match target {
+        RenameTarget::All => path.is_file() || path.is_dir(),
+        RenameTarget::FilesOnly => path.is_file(),
+        RenameTarget::DirsOnly => path.is_dir(),
+    }
+}
+
+/// Whether the entry's own name is valid UTF-8, the precondition every
+/// transformation in the library works on.
+fn has_utf8_name(path: &Path) -> bool {
+    path.file_name().is_some_and(|n| n.to_str().is_some())
+}
+
 /// Rename a list of explicitly-named entries (the `rename`-like mode).
 ///
 /// Each path is renamed **itself** (not its contents). Missing paths are
@@ -432,7 +449,15 @@ fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) 
         match plan_entry_with(path, config.target, config.cleanup) {
             RenamePlan::Rename(op) => ops.push(op),
             RenamePlan::AlreadyClean => reporter.skipped(path),
-            RenamePlan::Excluded => {}
+            // `Excluded` covers two very different cases: an entry the type
+            // filter deliberately left out (stay silent), and a name that is
+            // not valid UTF-8 (report it — the user named this path
+            // explicitly and would otherwise get no feedback at all).
+            RenamePlan::Excluded => {
+                if matches_target(path, config.target) && !has_utf8_name(path) {
+                    reporter.error(path, "Name is not valid UTF-8");
+                }
+            }
         }
     }
 

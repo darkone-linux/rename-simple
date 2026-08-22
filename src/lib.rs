@@ -717,20 +717,26 @@ pub enum EntryMatch {
     Identical,
     /// Two distinct regular files whose contents differ.
     Different,
-    /// At least one path is not a regular file (directory, socket, fifo…):
-    /// there is nothing to compare byte for byte.
+    /// At least one path is not a regular file (symlink, directory, socket,
+    /// fifo…): there is nothing to compare byte for byte, and nothing that
+    /// could be called a redundant copy.
     NotComparable,
 }
 
 /// Compare two existing paths to decide whether one is a strict duplicate of
 /// the other.
 ///
-/// Symlinks are followed, so what is compared is the content they resolve to.
-/// Files are compared by identity first, then by size, then chunk by chunk:
-/// differing files bail out early and no whole-file digest is ever computed,
-/// which makes an exact answer cheaper than hashing both sides.
+/// Symlinks are **not** followed: the entries themselves are compared, so a
+/// link on either side answers [`EntryMatch::NotComparable`]. A link is never a
+/// redundant copy of the bytes it points at, and content reached through one
+/// lives outside the rename — treating either as a duplicate would delete a
+/// real file on the strength of a name that merely points elsewhere.
+///
+/// Regular files are compared by identity first, then by size, then chunk by
+/// chunk: differing files bail out early and no whole-file digest is ever
+/// computed, which makes an exact answer cheaper than hashing both sides.
 pub fn compare_entries(a: &Path, b: &Path) -> io::Result<EntryMatch> {
-    let (meta_a, meta_b) = (fs::metadata(a)?, fs::metadata(b)?);
+    let (meta_a, meta_b) = (fs::symlink_metadata(a)?, fs::symlink_metadata(b)?);
 
     if is_same_entry(&meta_a, &meta_b) {
         return Ok(EntryMatch::SameEntry);

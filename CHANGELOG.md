@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-08-22
+
+A follow-up review of the duplicate detection shipped in 0.7.0 found that it
+resolved symlinks before comparing, which let `-D` delete entries it had no
+business deleting. Renaming behaviour is unchanged.
+
+### Fixed
+- `-D`/`--delete-duplicates` no longer deletes through symlinks. Comparison now
+  uses `symlink_metadata`, so a link on either side answers
+  `EntryMatch::NotComparable` and the clash stays a plain error. Two cases were
+  wrong before: a **symlinked source** was deleted although a link is not a
+  redundant copy of the bytes it points at (and the rename it stood in for
+  would have moved the link, not duplicated any content); and a **symlinked
+  destination** caused the real source file to be deleted, leaving the last
+  actual copy of those bytes outside the directory being cleaned up, one
+  `rm` away from being lost. This matches what the README and the man page
+  already promised — "two distinct regular files".
+- An entry whose name is not valid UTF-8 was silently ignored, even with `-v`,
+  and did not appear in the summary counts: a path named explicitly on the
+  command line produced no feedback whatsoever. It is now reported as
+  `Name is not valid UTF-8` (`[E]`) and left untouched. Entries dropped by the
+  `-f`/`-d` type filter stay silent, as before.
+
 ## [0.7.0] - 2026-08-21
 
 Renaming behaviour is unchanged; what changes is what happens when the cleaned
