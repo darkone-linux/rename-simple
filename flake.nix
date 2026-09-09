@@ -14,11 +14,6 @@
   # FLAKE OUTPUTS
   #----------------------------------------------------------------------------
   #
-  # Consumed by the Darkone NixOS Framework (dnf) as a flake input:
-  #   rename-simple.url = "github:darkone-linux/rename-simple";
-  #   rename-simple.inputs.nixpkgs.follows = "nixpkgs";
-  # then accessed as inputs.rename-simple.packages.${system}.default.
-  #
   # Standalone use:
   #   nix build   — build the binary
   #   nix run     — run directly
