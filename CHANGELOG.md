@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-09-09
+
+A maintenance release: no change to the renaming logic, the CLI surface or the
+exit codes. It refreshes the dependency lockfiles and fixes the author name
+carried by the packaged artifacts.
+
+### Changed
+- Author is now spelled `Guillaume Ponçon` instead of the `darkone-linux`
+  GitHub handle, in the man page `AUTHOR` and `COPYRIGHT` sections and in the
+  `Maintainer` field of the generated `.deb` control file. The
+  `github.com/darkone-linux/...` URLs are unchanged — they address the
+  repository, not the author.
+- Man page `.TH` header resynchronised with `Cargo.toml`: version `0.7.2`,
+  date `2026-09-09`.
+- Dropped a stale note in `flake.nix` describing a consumption pattern that no
+  longer applies.
+
+### Dependencies
+- Refreshed `Cargo.lock`: `syn` 3.0.3 → 3.0.5, `tinyvec` 1.12.0 → 1.13.2.
+  Dependency tree unchanged at 55 crates; `cargo audit` reports no advisory.
+- Refreshed `flake.lock`: `nixpkgs` (nixos-unstable) 2026-08-19 → 2026-09-08.
+
 ## [0.7.1] - 2026-08-22
 
 A follow-up review of the duplicate detection shipped in 0.7.0 found that it

@@ -1,6 +1,6 @@
 [package]
 name = "rename-simple"
-version = "0.7.1"
+version = "0.7.2"
 edition = "2021"
 # Floor imposed by the dependency graph: clap 4.6 and assert_cmd 2.2 both
 # declare rust-version = "1.85". Resolver v3 makes cargo honour this during
