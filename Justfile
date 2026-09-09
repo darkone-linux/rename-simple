@@ -216,7 +216,7 @@ _pkgs_deb:
         "Section: utils" \
         "Priority: optional" \
         "Architecture: {{ arch }}" \
-        "Maintainer: darkone-linux" \
+        "Maintainer: Guillaume Ponçon" \
         "Homepage: https://github.com/darkone-linux/rename-simple" \
         "Installed-Size: $INSTALLED_SIZE" \
         "Description: Rename files to clean, ASCII-safe slugs" \
