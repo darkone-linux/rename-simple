@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2026-09-19
+
+A maintenance release: no change to the renaming logic, the CLI surface or the
+exit codes. It refreshes two locked dependencies.
+
+### Dependencies
+- `clap` 4.6.6 → 4.6.7 (+ `clap_builder` and `clap_derive` 4.6.7) and
+  `rustix` 1.1.4 → 1.1.5 in `Cargo.lock`. Dependency tree unchanged at 55
+  crates; `cargo audit` reports no advisory.
+- `Cargo.toml` is untouched; the declared minimum Rust version 1.85 and the
+  whole dependency set still satisfy it.
+
 ## [0.7.2] - 2026-09-09
 
 A maintenance release: no change to the renaming logic, the CLI surface or the
