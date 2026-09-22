@@ -153,11 +153,11 @@ const RESET: &str = "\x1b[0m";
 
 /// Wrap `text` in an ANSI colour escape, but only when `enabled` (the target
 /// stream is a terminal). Piped / captured output stays plain.
-fn paint(enabled: bool, code: &str, text: &str) -> String {
+fn paint(enabled: bool, code: &'static str, text: &'static str) -> Cow<'static, str> {
     if enabled {
-        format!("{code}{text}{RESET}")
+        Cow::Owned(format!("{code}{text}{RESET}"))
     } else {
-        text.to_owned()
+        Cow::Borrowed(text)
     }
 }
 
@@ -192,10 +192,14 @@ fn plural_errors(n: usize) -> &'static str {
 /// directory is shown as `.`. Coloured only when `tty` is set.
 fn location(path: &Path, tty: bool) -> String {
     let dir = match path.parent() {
-        Some(p) if !p.as_os_str().is_empty() => p.to_string_lossy().into_owned(),
-        _ => ".".to_owned(),
+        Some(p) if !p.as_os_str().is_empty() => p.to_string_lossy(),
+        _ => Cow::Borrowed("."),
     };
-    paint(tty, GREY, &format!("{dir}:"))
+    if tty {
+        format!("{GREY}{dir}:{RESET}")
+    } else {
+        format!("{dir}:")
+    }
 }
 
 /// Prints the per-entry lines and the final report, honouring the verbosity
@@ -287,21 +291,20 @@ impl Reporter {
         let matched_word = plural_entries(matched);
         let renamed_word = plural_entries(self.renamed);
         let errors_word = plural_errors(self.errors);
-        // The duplicate segment only shows up when there is something to say,
-        // keeping the usual summary as short as it has always been.
-        let duplicates = if self.duplicates > 0 {
-            format!(
-                ", {} {} removed",
+        if self.duplicates > 0 {
+            println!(
+                "{matched} {matched_word} matched, {} {renamed_word} renamed, {} {} removed, {} {errors_word}.",
+                self.renamed,
                 self.duplicates,
-                plural_duplicates(self.duplicates)
-            )
+                plural_duplicates(self.duplicates),
+                self.errors
+            );
         } else {
-            String::new()
-        };
-        println!(
-            "{matched} {matched_word} matched, {} {renamed_word} renamed{duplicates}, {} {errors_word}.",
-            self.renamed, self.errors
-        );
+            println!(
+                "{matched} {matched_word} matched, {} {renamed_word} renamed, {} {errors_word}.",
+                self.renamed, self.errors
+            );
+        }
     }
 }
 
@@ -315,23 +318,33 @@ impl Reporter {
 /// An already existing destination is an error, except under `-D` when it is a
 /// strict duplicate of the source (see `resolve_existing`), in which case the
 /// source is deleted instead.
-fn filter_conflicts(ops: Vec<RenameOp>, config: &Config, reporter: &mut Reporter) -> Vec<RenameOp> {
-    let mut dest_count: HashMap<PathBuf, usize> = HashMap::new();
+fn filter_conflicts(
+    mut ops: Vec<RenameOp>,
+    config: &Config,
+    reporter: &mut Reporter,
+) -> Vec<RenameOp> {
+    let mut dest_count: HashMap<&Path, usize> = HashMap::with_capacity(ops.len());
     for op in &ops {
-        *dest_count.entry(op.to.clone()).or_insert(0) += 1;
+        *dest_count.entry(op.to.as_path()).or_insert(0) += 1;
     }
 
-    let mut safe = Vec::new();
-    for op in ops {
-        if dest_count[&op.to] > 1 {
+    let mut keep = Vec::with_capacity(ops.len());
+    for op in &ops {
+        if dest_count[op.to.as_path()] > 1 {
             reporter.error(&op.from, "Multiple entries would produce this name");
+            keep.push(false);
         } else if op.to.exists() {
-            resolve_existing(&op, config, reporter);
+            resolve_existing(op, config, reporter);
+            keep.push(false);
         } else {
-            safe.push(op);
+            keep.push(true);
         }
     }
-    safe
+    drop(dest_count);
+
+    let mut keep_iter = keep.into_iter();
+    ops.retain(|_| keep_iter.next().unwrap_or(false));
+    ops
 }
 
 /// Decide what to do with an op whose destination is already taken. Nothing is
@@ -421,10 +434,13 @@ fn apply_ops(ops: &[RenameOp], dry_run: bool, reporter: &mut Reporter) {
 /// `plan_entry_with`, which folds "filtered out" and "unusable name" into a
 /// single `Excluded` outcome.
 fn matches_target(path: &Path, target: RenameTarget) -> bool {
+    let Ok(meta) = path.metadata() else {
+        return false;
+    };
     match target {
-        RenameTarget::All => path.is_file() || path.is_dir(),
-        RenameTarget::FilesOnly => path.is_file(),
-        RenameTarget::DirsOnly => path.is_dir(),
+        RenameTarget::All => meta.is_file() || meta.is_dir(),
+        RenameTarget::FilesOnly => meta.is_file(),
+        RenameTarget::DirsOnly => meta.is_dir(),
     }
 }
 
@@ -467,7 +483,7 @@ fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) 
     // contain them. Otherwise renaming a parent first would invalidate the
     // stored child paths and make their renames fail with ENOENT.
     let mut ops = filter_conflicts(ops, config, reporter);
-    ops.sort_by_key(|op| std::cmp::Reverse(op.from.components().count()));
+    ops.sort_by_cached_key(|op| std::cmp::Reverse(op.from.components().count()));
     apply_ops(&ops, config.dry_run, reporter);
 }
 

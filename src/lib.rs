@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fs;
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -8,25 +9,40 @@ use unicode_normalization::UnicodeNormalization;
 // Character transliteration
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Lowercase ASCII letters and digits as static `&str` slices.
-/// Indexed by `(0..=9, a..=z)` for table-lookup transliteration.
-const ASCII_LOWER_TABLE: [&str; 36] = [
-    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f", "g", "h", "i",
-    "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
-];
-
-/// Map an ASCII alphanumeric character to its lowercase static slice.
-/// Returns `"-"` if `c` is not ASCII alphanumeric (defensive default).
-fn ascii_alnum_to_lower(c: char) -> &'static str {
-    let lower = c.to_ascii_lowercase();
-    if lower.is_ascii_digit() {
-        ASCII_LOWER_TABLE[(lower as u8 - b'0') as usize]
-    } else if lower.is_ascii_lowercase() {
-        ASCII_LOWER_TABLE[(lower as u8 - b'a' + 10) as usize]
-    } else {
-        "-"
+/// Lowercase ASCII letters and digits as static `&str` slices, indexed by byte value (0..128).
+/// Alphanumerics map to lowercase, `_` to `_`, and all other ASCII characters map to `-`.
+const fn make_ascii_map() -> [&'static str; 128] {
+    let mut table = ["-"; 128];
+    let mut i = 0u8;
+    while i < 128 {
+        table[i as usize] = match i {
+            b'0'..=b'9' => {
+                const DIGITS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+                DIGITS[(i - b'0') as usize]
+            }
+            b'a'..=b'z' => {
+                const LOWER: [&str; 26] = [
+                    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
+                    "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+                ];
+                LOWER[(i - b'a') as usize]
+            }
+            b'A'..=b'Z' => {
+                const LOWER: [&str; 26] = [
+                    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
+                    "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+                ];
+                LOWER[(i - b'A') as usize]
+            }
+            b'_' => "_",
+            _ => "-",
+        };
+        i += 1;
     }
+    table
 }
+
+const ASCII_MAP: [&str; 128] = make_ascii_map();
 
 /// Non-decomposable Latin letters, digraphs, typographic ligatures and a few
 /// symbols that need an explicit multi-character ASCII expansion.
@@ -167,14 +183,11 @@ fn fold_lower(c: char) -> char {
 /// 7. Everything else (spaces, punctuation, CJK, emoji…) returns `"-"`.
 #[must_use]
 pub fn transliterate_char(c: char) -> &'static str {
+    if (c as u32) < 128 {
+        return ASCII_MAP[c as usize];
+    }
     if is_combining_mark(c) {
         return "";
-    }
-    if c.is_ascii_alphanumeric() {
-        return ascii_alnum_to_lower(c);
-    }
-    if c == '_' {
-        return "_";
     }
     if let Some(s) = special_latin(c) {
         return s;
@@ -188,8 +201,8 @@ pub fn transliterate_char(c: char) -> &'static str {
     // decomposition starts with a known base (À, é, Č, Ą, ș, İ, Ａ, ², ά, Й…).
     if let Some(base) = c.nfkd().find(|x| !is_combining_mark(*x)) {
         if base != c {
-            if base.is_ascii_alphanumeric() {
-                return ascii_alnum_to_lower(base);
+            if (base as u32) < 128 {
+                return ASCII_MAP[base as usize];
             }
             let base = fold_lower(base);
             if let Some(s) = greek(base).or_else(|| cyrillic(base)) {
@@ -230,13 +243,22 @@ impl CleanupOptions {
 
     /// Apply the enabled fixes in order: mojibake repair first (it restores
     /// the real characters HTML stripping then operates on), then HTML.
-    fn apply(self, name: &str) -> String {
-        let mut out = name.to_owned();
-        if self.fix_unicode {
-            out = fix_unicode(&out);
+    fn apply(self, name: &str) -> Cow<'_, str> {
+        if !self.fix_unicode && !self.fix_html {
+            return Cow::Borrowed(name);
         }
-        if self.fix_html {
-            out = fix_html(&out);
+        let mut out = Cow::Borrowed(name);
+        if self.fix_unicode && !out.is_ascii() {
+            let fixed = fix_unicode(&out);
+            if fixed != out.as_ref() {
+                out = Cow::Owned(fixed);
+            }
+        }
+        if self.fix_html && (out.contains('<') || out.contains('&')) {
+            let fixed = fix_html(&out);
+            if fixed != out.as_ref() {
+                out = Cow::Owned(fixed);
+            }
         }
         out
     }
@@ -297,6 +319,9 @@ fn cp1252_byte(c: char) -> Option<u8> {
 /// triple mojibake (`CafÃƒÂ©` → `CafÃ©` → `Café`).
 #[must_use]
 pub fn fix_unicode(name: &str) -> String {
+    if name.is_ascii() {
+        return name.to_owned();
+    }
     let mut current = name.to_owned();
     for _ in 0..3 {
         let Some(bytes) = current
@@ -361,14 +386,16 @@ fn is_separator_tag(content: &str) -> bool {
     let end = name
         .find(|c: char| !c.is_ascii_alphanumeric())
         .unwrap_or(name.len());
-    let name = name[..end].to_ascii_lowercase();
+    let name = &name[..end];
     // Headings `h1`..`h6`.
-    if let Some(rest) = name.strip_prefix('h') {
+    if let Some(rest) = name.strip_prefix(['h', 'H']) {
         if rest.len() == 1 && matches!(rest.as_bytes()[0], b'1'..=b'6') {
             return true;
         }
     }
-    SEPARATOR_TAGS.contains(&name.as_str())
+    SEPARATOR_TAGS
+        .iter()
+        .any(|&tag| tag.eq_ignore_ascii_case(name))
 }
 
 /// Remove HTML/XML tags: a `<` immediately followed by an ASCII letter, `/`
@@ -379,6 +406,9 @@ fn is_separator_tag(content: &str) -> bool {
 /// words around them stay separate; inline tags (`<b>`, `<i>`…) vanish with no
 /// gap (`client<b>s` → `clients`).
 fn strip_tags(s: &str) -> String {
+    if !s.contains('<') {
+        return s.to_owned();
+    }
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while let Some(pos) = rest.find('<') {
@@ -489,7 +519,18 @@ fn decode_entity_body(body: &str) -> Option<char> {
         };
         return char::from_u32(cp).filter(|c| !c.is_control());
     }
-    named_entity(body).or_else(|| named_entity(&body.to_ascii_lowercase()))
+    if let Some(c) = named_entity(body) {
+        return Some(c);
+    }
+    if body.len() <= MAX_ENTITY_LEN {
+        let mut buf = [0u8; MAX_ENTITY_LEN];
+        buf[..body.len()].copy_from_slice(body.as_bytes());
+        buf[..body.len()].make_ascii_lowercase();
+        if let Ok(lower) = std::str::from_utf8(&buf[..body.len()]) {
+            return named_entity(lower);
+        }
+    }
+    None
 }
 
 /// Longest plausible entity body (`&frac34;` style names stay well under it).
@@ -498,6 +539,9 @@ const MAX_ENTITY_LEN: usize = 12;
 /// Replace decodable HTML entities with their character; anything that does
 /// not parse as an entity (`Tom & Jerry`, `&zzz;`) is kept verbatim.
 fn decode_entities(s: &str) -> String {
+    if !s.contains('&') {
+        return s.to_owned();
+    }
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while let Some(pos) = rest.find('&') {
@@ -525,6 +569,9 @@ fn decode_entities(s: &str) -> String {
 /// a decoded `<` or `>` simply becomes a `-` in the slug pipeline.
 #[must_use]
 pub fn fix_html(name: &str) -> String {
+    if !name.contains('<') && !name.contains('&') {
+        return name.to_owned();
+    }
     decode_entities(&strip_tags(name))
 }
 
@@ -532,65 +579,79 @@ pub fn fix_html(name: &str) -> String {
 // String transformation pipeline
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Collapse any run of consecutive `sep` characters into a single `sep`.
-fn collapse_runs(s: &str, sep: char) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut prev_sep = false;
-    for c in s.chars() {
-        if c == sep {
-            if !prev_sep {
-                out.push(sep);
-            }
-            prev_sep = true;
-        } else {
-            prev_sep = false;
-            out.push(c);
-        }
-    }
-    out
-}
-
-/// Remove `-` adjacent to `_`:
-///   `_-` → `_`  and  `-_` → `_`
-///
-/// Repeated in a loop until no pattern remains (handles chains like `_-_-`).
-fn fix_underscore_dash(s: &str) -> String {
-    let mut current = s.to_owned();
-    loop {
-        let next = current.replace("_-", "_").replace("-_", "_");
-        if next == current {
-            break;
-        }
-        current = next;
-    }
-    current
-}
-
-/// Remove leading and trailing `-` or `_` characters.
-fn trim_separators(s: &str) -> String {
-    s.trim_matches(|c| c == '-' || c == '_').to_owned()
-}
-
 /// Transform a filename **stem** (without extension) into a clean ASCII slug.
 ///
 /// Pipeline:
-/// 1. Normalise the input to NFKD so accented letters split into base + marks
-///    and compatibility forms (ligatures `ﬁ`, fullwidth `Ａ`, superscripts
-///    `²`…) decompose to their plain equivalents. This makes the
-///    transformation idempotent regardless of whether the input filename was
-///    stored as NFC (`café`) or NFD (`cafe\u{0301}`).
-/// 2. Transliterate every character (combining marks become empty).
-/// 3. Collapse consecutive `-`.
-/// 4. Remove `-` adjacent to `_` (`_-` → `_`, `-_` → `_`).
-/// 5. Collapse consecutive `_` (step 4 can produce `__` from e.g. `_-_`).
-/// 6. Trim leading / trailing `-` and `_`.
+/// 1. If pure ASCII, fast-path byte classification without NFKD overhead.
+/// 2. Otherwise normalise to NFKD so accented letters split into base + marks,
+///    and transliterate every character (combining marks become empty).
+/// 3. In a single pass, collapse consecutive separators, resolve adjacent
+///    underscore/dash (`_` always takes precedence), and trim leading / trailing
+///    separators.
 #[must_use]
 pub fn transform_stem(stem: &str) -> String {
-    let raw: String = stem.nfkd().map(transliterate_char).collect();
-    let collapsed = collapse_runs(&raw, '-');
-    let fixed = fix_underscore_dash(&collapsed);
-    let fixed = collapse_runs(&fixed, '_');
-    trim_separators(&fixed)
+    if stem.is_empty() {
+        return String::new();
+    }
+
+    let mut out = String::with_capacity(stem.len());
+    let mut pending_sep: Option<char> = None;
+
+    if stem.is_ascii() {
+        for &b in stem.as_bytes() {
+            match b {
+                b'0'..=b'9' | b'a'..=b'z' => {
+                    if let Some(sep) = pending_sep.take() {
+                        out.push(sep);
+                    }
+                    out.push(b as char);
+                }
+                b'A'..=b'Z' => {
+                    if let Some(sep) = pending_sep.take() {
+                        out.push(sep);
+                    }
+                    out.push((b + 32) as char);
+                }
+                b'_' => {
+                    if !out.is_empty() {
+                        pending_sep = Some('_');
+                    }
+                }
+                _ => {
+                    if !out.is_empty() && pending_sep.is_none() {
+                        pending_sep = Some('-');
+                    }
+                }
+            }
+        }
+    } else {
+        for c in stem.nfkd() {
+            let s = transliterate_char(c);
+            if s.is_empty() {
+                continue;
+            }
+            match s {
+                "-" => {
+                    if !out.is_empty() && pending_sep.is_none() {
+                        pending_sep = Some('-');
+                    }
+                }
+                "_" => {
+                    if !out.is_empty() {
+                        pending_sep = Some('_');
+                    }
+                }
+                alnum => {
+                    if let Some(sep) = pending_sep.take() {
+                        out.push(sep);
+                    }
+                    out.push_str(alnum);
+                }
+            }
+        }
+    }
+
+    out
 }
 
 /// Known compound extensions that must be kept together, stored with their
@@ -600,7 +661,7 @@ const DOUBLE_EXTENSIONS: &[&str] = &[".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst
 /// Extract a compound extension if the filename ends with one of the known
 /// double extensions (case-insensitive), and return `(stem, ".compound.ext")`.
 /// Falls back to the standard single-extension split otherwise.
-fn split_extension(filename: &str) -> (&str, String) {
+fn split_extension(filename: &str) -> (&str, Cow<'_, str>) {
     // Match the known compound extensions case-insensitively by comparing the
     // trailing bytes directly — no lowercased copy of the whole name and no
     // per-iteration `format!`. A match implies the tail is pure ASCII, so
@@ -611,7 +672,7 @@ fn split_extension(filename: &str) -> (&str, String) {
             continue;
         };
         if bytes[start..].eq_ignore_ascii_case(ext.as_bytes()) {
-            return (&filename[..start], ext.to_owned());
+            return (&filename[..start], Cow::Borrowed(ext));
         }
     }
 
@@ -625,18 +686,23 @@ fn split_extension(filename: &str) -> (&str, String) {
     let ext_str = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
     let valid_ext = !ext_str.is_empty()
-        && ext_str.chars().all(|c| c.is_ascii_alphanumeric())
+        && ext_str.bytes().all(|b| b.is_ascii_alphanumeric())
         && ext_str.len() <= 10;
 
     if valid_ext {
-        let ext = format!(".{}", ext_str.to_ascii_lowercase());
+        let ext = if ext_str.bytes().all(|b| !b.is_ascii_uppercase()) {
+            let dot_pos = filename.len() - ext_str.len() - 1;
+            Cow::Borrowed(&filename[dot_pos..])
+        } else {
+            Cow::Owned(format!(".{}", ext_str.to_ascii_lowercase()))
+        };
         let stem = path
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or(filename);
         (stem, ext)
     } else {
-        (filename, String::new())
+        (filename, Cow::Borrowed(""))
     }
 }
 
@@ -664,13 +730,17 @@ pub fn transform_filename_with(filename: &str, opts: CleanupOptions) -> String {
 
     let cleaned = opts.apply(filename);
     let (stem, ext) = split_extension(&cleaned);
-    let new_stem = transform_stem(stem);
+    let mut new_stem = transform_stem(stem);
 
     if new_stem.is_empty() {
-        return format!("unnamed{ext}");
+        let mut out = String::with_capacity(7 + ext.len());
+        out.push_str("unnamed");
+        out.push_str(&ext);
+        return out;
     }
 
-    format!("{new_stem}{ext}")
+    new_stem.push_str(&ext);
+    new_stem
 }
 
 /// Transform a **directory** name into a clean ASCII slug.
@@ -694,7 +764,8 @@ pub fn transform_dirname_with(name: &str, opts: CleanupOptions) -> String {
         return name.to_owned();
     }
 
-    let new_name = transform_stem(&opts.apply(name));
+    let cleaned = opts.apply(name);
+    let new_name = transform_stem(&cleaned);
     if new_name.is_empty() {
         return "unnamed".to_owned();
     }
@@ -851,8 +922,11 @@ pub fn plan_entry(path: &Path, target: RenameTarget) -> RenamePlan {
 /// (mojibake repair, HTML stripping) before the slug pipeline.
 #[must_use]
 pub fn plan_entry_with(path: &Path, target: RenameTarget, opts: CleanupOptions) -> RenamePlan {
-    let is_file = path.is_file();
-    let is_dir = path.is_dir();
+    let Ok(meta) = fs::metadata(path) else {
+        return RenamePlan::Excluded;
+    };
+    let is_dir = meta.is_dir();
+    let is_file = meta.is_file();
 
     let include = match target {
         RenameTarget::All => is_file || is_dir,
