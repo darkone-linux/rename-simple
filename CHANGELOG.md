@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4] - 2026-09-22
+
+A maintenance and performance release: no change to the renaming logic, the CLI
+surface, the man page or the exit codes. It optimises character transliteration,
+stem slug generation, string allocations and filesystem queries.
+
+### Changed
+- **Fast-path ASCII transliteration**: `transliterate_char` now maps all ASCII
+  code points (`< 128`) via a static lookup table (`ASCII_MAP`), bypassing
+  Unicode case folding, Greek/Cyrillic matching and NFKD decomposition
+  iterators for standard ASCII characters (letters, digits, `_` and
+  punctuation/symbols).
+- **Single-pass stem transformation**: `transform_stem` replaces the
+  multi-stage pipeline (which previously incurred 5 to 7 heap allocations and
+  iterative `replace()` loops) with a single-pass buffer builder. Pure ASCII
+  stems take a fast path operating directly on byte slices without instantiating
+  the Unicode normalization engine.
+- **Zero-allocation cleanups and extension handling**:
+  - `CleanupOptions::apply` returns `Cow<'a, str>` and skips heap allocation
+    when no cleanups are enabled, when inputs are already ASCII (for mojibake
+    repair), or when inputs contain no `<`/`&` (for HTML stripping).
+  - `split_extension` returns `Cow::Borrowed` slices for already-lowercase
+    extensions (`.txt`, `.tar.gz`, etc.) instead of formatting a new string on
+    every call.
+  - `transform_filename_with` reuses the stem's allocated buffer via
+    `.push_str(&ext)` instead of allocating a second `String` with `format!`.
+  - `fix_unicode`, `fix_html`, `is_separator_tag` and `decode_entity_body`
+    avoid heap allocations on clean inputs or uppercase named entities.
+- **In-place conflict detection & reduced syscalls**:
+  - `filter_conflicts` borrows `&Path` for its destination count map and filters
+    operations in-place with a boolean retention mask, eliminating `PathBuf`
+    cloning and extra vector allocations.
+  - `plan_entry_with` and `matches_target` query `fs::metadata` once per path
+    instead of performing separate `is_file()` and `is_dir()` calls.
+  - `process_targets` uses `sort_by_cached_key` to avoid re-evaluating path
+    component depths during sorting.
+
 ## [0.7.3] - 2026-09-19
 
 A maintenance release: no change to the renaming logic, the CLI surface or the
