@@ -342,6 +342,23 @@ mod transliterate_char_tests {
     }
 
     #[test]
+    fn low_line_compatibility_forms_map_to_underscore() {
+        // NFKD base is `_`: kept as `_`, exactly what `transform_stem` yields
+        // after its own NFKD normalisation.
+        for c in [
+            '＿', '\u{FE33}', '\u{FE34}', '\u{FE4D}', '\u{FE4E}', '\u{FE4F}',
+        ] {
+            assert_eq!(transliterate_char(c), "_", "U+{:04X}", u32::from(c));
+            assert_eq!(
+                transform_stem(&format!("a{c}b")),
+                "a_b",
+                "U+{:04X}",
+                u32::from(c)
+            );
+        }
+    }
+
+    #[test]
     fn superscripts_and_subscripts_map_to_digits() {
         assert_eq!(transliterate_char('²'), "2");
         assert_eq!(transliterate_char('³'), "3");
@@ -990,6 +1007,37 @@ mod transform_filename_tests {
     }
 
     #[test]
+    fn slash_in_name_never_splits_the_extension() {
+        // A name is a single component: a `/` (only reachable through `-H`
+        // decoding `&#47;`) is a plain separator, never a path boundary.
+        assert_eq!(transform_filename("a.h/"), "a-h");
+        assert_eq!(transform_filename("foo.txt/"), "foo-txt");
+        assert_eq!(transform_filename("foo.txt/."), "foo-txt");
+        assert_eq!(transform_filename("Report / Final.txt"), "report-final.txt");
+        assert_eq!(transform_filename("a/b.TXT"), "a-b.txt");
+    }
+
+    #[test]
+    fn filename_output_never_contains_path_separators() {
+        // Names starting with `.` are hidden and returned verbatim, hence
+        // `x/../y.md` rather than `../y.md`.
+        for name in [
+            "a.h/",
+            "foo.txt/",
+            "x/.txt",
+            "x/../y.md",
+            "a\\b.txt",
+            "dir/",
+        ] {
+            let out = transform_filename(name);
+            assert!(
+                !out.contains('/') && !out.contains('\\'),
+                "transform_filename must never emit path separators: {name:?} -> {out:?}"
+            );
+        }
+    }
+
+    #[test]
     fn unnamed_collision_is_documented_and_deterministic() {
         // Two stems that reduce to "" share the same unnamed.<ext> destination.
         // This is the M1 finding from the audit: collision is detected later
@@ -1276,6 +1324,25 @@ mod fix_html_tests {
         assert_eq!(
             transform_filename_with("Tom &amp; Jerry.mp4", opts),
             "tom-jerry.mp4"
+        );
+    }
+
+    #[test]
+    fn decoded_slash_is_a_plain_separator() {
+        // `&#47;` decodes to `/`: it must neither swallow the extension dot
+        // nor drop the text before it.
+        let opts = CleanupOptions {
+            fix_html: true,
+            ..CleanupOptions::default()
+        };
+        assert_eq!(transform_filename_with("foo.txt&#47;", opts), "foo-txt");
+        assert_eq!(
+            transform_filename_with("Report &#47; Final.txt", opts),
+            "report-final.txt"
+        );
+        assert_eq!(
+            transform_filename_with("Report &#x2F; Final", opts),
+            "report-final"
         );
     }
 

@@ -176,8 +176,9 @@ fn fold_lower(c: char) -> char {
 ///    (`Æ`, `Œ`, `ß`, `Þ`, `Ø`, `Ł`, `Đ`/`Ð`, `ﬁ`, `™`, `№`…).
 /// 5. Greek and Cyrillic letters are romanised via dedicated tables
 ///    (case-folded first).
-/// 6. Otherwise the char is NFKD-decomposed; if the base is ASCII
-///    alphanumeric its lowercase form is returned (covers the entire Latin
+/// 6. Otherwise the char is NFKD-decomposed; if the base is ASCII it maps
+///    like that ASCII char — lowercase alphanumeric, `_` for `＿` and the
+///    other low line forms, `"-"` otherwise (covers the entire Latin
 ///    Extended-A block, fullwidth forms, superscripts…); if the base is
 ///    Greek or Cyrillic the tables above apply (accented Greek, `Ё`…).
 /// 7. Everything else (spaces, punctuation, CJK, emoji…) returns `"-"`.
@@ -676,14 +677,19 @@ fn split_extension(filename: &str) -> (&str, Cow<'_, str>) {
         }
     }
 
-    // Standard single-extension split via Path.
+    // Standard single-extension split on the last dot of the name itself, not
+    // via `Path`: a cleaned name may contain a `/` (`-H` decodes `&#47;`) that
+    // `Path` would treat as a component boundary. As with `Path`, a dot in
+    // first position does not start an extension.
     // An extension is only valid when every character is ASCII alphanumeric
     // AND the total length does not exceed 10.  Non-ASCII characters (accents,
     // spaces, punctuation, …) or a length > 10 cause the candidate extension
     // to be re-absorbed into the stem so it goes through the full
     // transliteration pipeline.
-    let path = Path::new(filename);
-    let ext_str = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let Some(dot) = filename.rfind('.').filter(|&i| i > 0) else {
+        return (filename, Cow::Borrowed(""));
+    };
+    let ext_str = &filename[dot + 1..];
 
     let valid_ext = !ext_str.is_empty()
         && ext_str.bytes().all(|b| b.is_ascii_alphanumeric())
@@ -691,16 +697,11 @@ fn split_extension(filename: &str) -> (&str, Cow<'_, str>) {
 
     if valid_ext {
         let ext = if ext_str.bytes().all(|b| !b.is_ascii_uppercase()) {
-            let dot_pos = filename.len() - ext_str.len() - 1;
-            Cow::Borrowed(&filename[dot_pos..])
+            Cow::Borrowed(&filename[dot..])
         } else {
-            Cow::Owned(format!(".{}", ext_str.to_ascii_lowercase()))
+            Cow::Owned(filename[dot..].to_ascii_lowercase())
         };
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or(filename);
-        (stem, ext)
+        (&filename[..dot], ext)
     } else {
         (filename, Cow::Borrowed(""))
     }

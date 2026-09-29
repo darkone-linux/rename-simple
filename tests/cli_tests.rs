@@ -821,6 +821,26 @@ fn test_fix_html_strips_tags_and_entities() {
 }
 
 #[test]
+fn test_fix_html_decoded_slash_stays_in_the_basename() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    // `&#47;` decodes to '/': the destination must stay a plain basename.
+    fs::write(dir.join("foo.txt&#47;"), "content").unwrap();
+    fs::write(dir.join("Report &#47; Final.txt"), "content").unwrap();
+
+    let output = cmd()
+        .arg("-H")
+        .arg(dir.join("foo.txt&#47;"))
+        .arg(dir.join("Report &#47; Final.txt"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("foo-txt").exists());
+    assert!(dir.join("report-final.txt").exists());
+}
+
+#[test]
 fn test_fix_all_applies_unicode_and_html() {
     let temp_dir = tempfile::tempdir().unwrap();
     let dir = temp_dir.path();
