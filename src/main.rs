@@ -61,7 +61,7 @@ struct Cli {
     )]
     fix_html: bool,
 
-    /// Apply every cleanup fix (currently equivalent to -U -H)
+    /// Apply every cleanup fix: -U and -H
     #[arg(short = 'A', long = "fix-all")]
     fix_all: bool,
 
