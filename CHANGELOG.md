@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-09-29
+
+First stable release. It fixes a renaming regression introduced in 0.7.4. The
+options are unchanged.
+
+### Added
+- Library: `RenameTarget::matches` and `plan_entry_with_metadata`, to plan a
+  rename from metadata already read.
+
+### Changed
+- `transliterate_char` returns `_` instead of `-` for the low line
+  compatibility forms (`＿` U+FF3F, U+FE33, U+FE34, U+FE4D to U+FE4F). This
+  changed silently in 0.7.4 and is now documented and tested. Names produced
+  by the CLI are not affected.
+- Each argument is read with a single `stat` call instead of two or three.
+- Man page rewritten to be shorter and more precise. The exit status for an
+  invalid command line is corrected to `2` (it said `1`).
+- README: removed the warning about the 0.4.0 breaking change and corrected
+  the examples (the `.:` prefix shown for `~/Downloads/*` arguments, a missing
+  summary line, a verbose example without `[X]` lines). The output streams,
+  the exit status and the handling of non-UTF-8 names are now documented.
+- `-A` help: "Apply every cleanup fix: -U and -H".
+- Internal cleanup: `ASCII_MAP` is a `static`, `transform_stem` shares its
+  separator logic between ASCII and non-ASCII names, and
+  `CleanupOptions::apply`, `filter_conflicts` and the summary line are
+  simpler.
+
+### Fixed
+- `-H`: a name ending with a decoded slash (`foo.txt&#47;`) lost its extension
+  dot and kept the slash (`footxt/`), so the rename failed with
+  `Not a directory`. Regression from 0.7.4. It now becomes `foo-txt`.
+- `-H`: the text before a decoded slash was dropped (`Report &#47; Final.txt`
+  became `final.txt`). It now becomes `report-final.txt`. The extension is
+  split on the last dot of the name instead of on path components.
+- The 0.7.4 notes stated that the renaming logic was unchanged, omitting the
+  `-H` regression and the `transliterate_char` change.
+
 ## [0.7.4] - 2026-09-22
 
 A maintenance and performance release: no change to the renaming logic, the CLI
