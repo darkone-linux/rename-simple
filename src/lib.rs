@@ -12,28 +12,17 @@ use unicode_normalization::UnicodeNormalization;
 /// Lowercase ASCII letters and digits as static `&str` slices, indexed by byte value (0..128).
 /// Alphanumerics map to lowercase, `_` to `_`, and all other ASCII characters map to `-`.
 const fn make_ascii_map() -> [&'static str; 128] {
+    const DIGITS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+    const LOWER: [&str; 26] = [
+        "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r",
+        "s", "t", "u", "v", "w", "x", "y", "z",
+    ];
     let mut table = ["-"; 128];
     let mut i = 0u8;
     while i < 128 {
         table[i as usize] = match i {
-            b'0'..=b'9' => {
-                const DIGITS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
-                DIGITS[(i - b'0') as usize]
-            }
-            b'a'..=b'z' => {
-                const LOWER: [&str; 26] = [
-                    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
-                    "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
-                ];
-                LOWER[(i - b'a') as usize]
-            }
-            b'A'..=b'Z' => {
-                const LOWER: [&str; 26] = [
-                    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
-                    "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
-                ];
-                LOWER[(i - b'A') as usize]
-            }
+            b'0'..=b'9' => DIGITS[(i - b'0') as usize],
+            b'a'..=b'z' | b'A'..=b'Z' => LOWER[(i.to_ascii_lowercase() - b'a') as usize],
             b'_' => "_",
             _ => "-",
         };
@@ -42,7 +31,9 @@ const fn make_ascii_map() -> [&'static str; 128] {
     table
 }
 
-const ASCII_MAP: [&str; 128] = make_ascii_map();
+/// `static`, not `const`: indexed at runtime on the hot path, so it must live
+/// once in read-only memory instead of being materialised at each use.
+static ASCII_MAP: [&str; 128] = make_ascii_map();
 
 /// Non-decomposable Latin letters, digraphs, typographic ligatures and a few
 /// symbols that need an explicit multi-character ASCII expansion.
