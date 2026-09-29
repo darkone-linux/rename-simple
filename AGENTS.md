@@ -35,6 +35,22 @@ man/
 - Every CLI behaviour documented in `README.md` must have a mirror entry in the
   man page and vice‑versa — keep both in sync manually.
 
+## Writing Rules (README, man page)
+
+Apply to `README.md` and `man/rename-simple.1`.
+
+- **Concise, precise**: state exact behaviour; no filler, no marketing, no
+  repetition.
+- **No em dash (`—`) or en dash (`–`)**, nor roff `\[em]` / `\[en]`: use a
+  colon, comma, parentheses or a new sentence. Ranges: "`<h1>` to `<h6>`".
+- **No hedging about the future**: no "currently", "for now", "future versions
+  will". Describe what the program does today.
+- **No history**: no breaking-change warnings, no "since x.y" notes; release
+  history belongs in `CHANGELOG.md`.
+- **Exact examples**: check every input → output pair with `rename-simple -n`.
+- **Man page**: `\-` for hyphens in options and commands, `\(->` for arrows,
+  `mandoc -Tlint` clean.
+
 ## Current Status
 
 - All code, comments, and documentation in English
@@ -75,7 +91,8 @@ Options:
 
 Each argument is renamed itself (`rename`(1)-like); without `-f`/`-d` both files
 and directories are renamed. With no argument, the program prints its help.
-Exit status: `0` on success (including no-op), `1` on error.
+Exit status: `0` if the command line is valid (per-entry errors do not change
+it); `2` if it is invalid (clap usage error: unknown option, `-f` with `-d`…).
 Default: no output; details only with `-v`.
 
 ## Error Handling
