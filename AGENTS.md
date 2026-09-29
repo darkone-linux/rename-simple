@@ -5,7 +5,7 @@ Telegraph style. Root rules only. Read scoped `AGENTS.md` before subtree work.
 ## Project Overview
 
 - **Goal**: Rename files to clean, ASCII-safe slugs.
-- **Language**: Rust (edition 2021, MSRV 1.70).
+- **Language**: Rust (edition 2021, MSRV 1.85, `rust-version` in `Cargo.toml`).
 - **Build**: `cargo build --release` → `target/release/rename-simple`
 - **Quality gate**: `just test` (fmt-check, lint, unit, audit, doc).
 - **Dev shell**: `nix-shell` — cargo, rustc, clippy, rustfmt, cargo-audit, just, gh, nixfmt (pinned).
@@ -16,8 +16,11 @@ Telegraph style. Root rules only. Read scoped `AGENTS.md` before subtree work.
 src/
 ├── lib.rs      # Core transformation logic
 │               #   public API: transliterate_char, transform_stem,
-│               #               transform_filename, transform_dirname,
-│               #               plan_rename, RenameOp, RenameTarget
+│               #     transform_filename[_with], transform_dirname[_with],
+│               #     CleanupOptions, fix_unicode, fix_html,
+│               #     compare_entries, EntryMatch, plan_entry[_with],
+│               #     plan_entry_with_metadata, plan_rename, RenamePlan,
+│               #     RenameOp, RenameTarget
 └── main.rs     # CLI (argument parsing, conflict detection, rename driver)
 tests/
 ├── transform_tests.rs  # Pure unit tests for the transformation pipeline
@@ -80,7 +83,7 @@ Options:
   -d, --dirs-only          Rename directories only
   -U, --fix-unicode        Repair mojibake (UTF-8 wrongly decoded as Latin-1/CP1252) before renaming
   -H, --fix-html           Strip HTML tags and decode HTML entities before renaming
-  -A, --fix-all            Apply every cleanup fix (currently equivalent to -U -H)
+  -A, --fix-all            Apply every cleanup fix: -U and -H
   -D, --delete-duplicates  Delete a source that is a byte-for-byte duplicate of an existing destination
   -q, --quiet              Print nothing at all
   -v, --verbose            Show every entry, including the ones left untouched
@@ -93,12 +96,13 @@ Each argument is renamed itself (`rename`(1)-like); without `-f`/`-d` both files
 and directories are renamed. With no argument, the program prints its help.
 Exit status: `0` if the command line is valid (per-entry errors do not change
 it); `2` if it is invalid (clap usage error: unknown option, `-f` with `-d`…).
-Default: no output; details only with `-v`.
+Default output: `[R]` lines (stdout), `[W]` / `[E]` lines (stderr), then a
+summary. `-v` adds `[X]` lines for unchanged entries; `-q` prints nothing.
 
 ## Error Handling
 
-- **Conflict detection**: Multiple files that would rename to the same destination are skipped with a warning.
-- **Existing destination**: Files that already exist at the target path are skipped with a warning.
+- **Conflict detection**: Entries that would rename to the same destination are all left untouched, each reported as an error (`[E]`).
+- **Existing destination**: Never overwritten; the entry is left untouched and reported as an error (`[E]`), except strict duplicates under `-D`.
 - **Strict duplicates**: When source and destination are two regular files with byte-for-byte identical content, `-D` deletes the source (`[W]`); without `-D` the clash stays an error naming the flag. Never implied by `-A`.
 - **Symlinks**: Excluded from duplicate detection (`symlink_metadata`, never followed) — a link is not a copy, and a symlinked destination points outside the operation.
 - **Invalid UTF-8**: Names that are not valid UTF-8 cannot be transformed; reported as an error, entry left untouched.
