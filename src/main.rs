@@ -1,6 +1,6 @@
 use clap::{CommandFactory, Parser};
 use rename_files::{
-    compare_entries, plan_entry_with, CleanupOptions, EntryMatch, RenameOp, RenamePlan,
+    compare_entries, plan_entry_with_metadata, CleanupOptions, EntryMatch, RenameOp, RenamePlan,
     RenameTarget,
 };
 use std::borrow::Cow;
@@ -430,20 +430,6 @@ fn apply_ops(ops: &[RenameOp], dry_run: bool, reporter: &mut Reporter) {
     }
 }
 
-/// Whether an entry passes the `-f` / `-d` type filter. Mirrors the check in
-/// `plan_entry_with`, which folds "filtered out" and "unusable name" into a
-/// single `Excluded` outcome.
-fn matches_target(path: &Path, target: RenameTarget) -> bool {
-    let Ok(meta) = path.metadata() else {
-        return false;
-    };
-    match target {
-        RenameTarget::All => meta.is_file() || meta.is_dir(),
-        RenameTarget::FilesOnly => meta.is_file(),
-        RenameTarget::DirsOnly => meta.is_dir(),
-    }
-}
-
 /// Whether the entry's own name is valid UTF-8, the precondition every
 /// transformation in the library works on.
 fn has_utf8_name(path: &Path) -> bool {
@@ -458,11 +444,13 @@ fn has_utf8_name(path: &Path) -> bool {
 fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) {
     let mut ops = Vec::new();
     for path in paths {
-        if !path.exists() {
+        // A single `stat` per argument: it detects a missing path and feeds
+        // both the planning and the `Excluded` diagnosis below.
+        let Ok(meta) = path.metadata() else {
             reporter.error(path, "No such file or directory");
             continue;
-        }
-        match plan_entry_with(path, config.target, config.cleanup) {
+        };
+        match plan_entry_with_metadata(path, &meta, config.target, config.cleanup) {
             RenamePlan::Rename(op) => ops.push(op),
             RenamePlan::AlreadyClean => reporter.skipped(path),
             // `Excluded` covers two very different cases: an entry the type
@@ -470,7 +458,7 @@ fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) 
             // not valid UTF-8 (report it — the user named this path
             // explicitly and would otherwise get no feedback at all).
             RenamePlan::Excluded => {
-                if matches_target(path, config.target) && !has_utf8_name(path) {
+                if config.target.matches(&meta) && !has_utf8_name(path) {
                     reporter.error(path, "Name is not valid UTF-8");
                 }
             }

@@ -844,6 +844,19 @@ pub enum RenameTarget {
     DirsOnly,
 }
 
+impl RenameTarget {
+    /// Whether an entry with this metadata passes the type filter. Anything
+    /// that is neither a file nor a directory (a socket, a FIFO…) never does.
+    #[must_use]
+    pub fn matches(self, meta: &fs::Metadata) -> bool {
+        match self {
+            RenameTarget::All => meta.is_file() || meta.is_dir(),
+            RenameTarget::FilesOnly => meta.is_file(),
+            RenameTarget::DirsOnly => meta.is_dir(),
+        }
+    }
+}
+
 /// A single rename operation computed (but not yet applied).
 #[derive(Debug, Clone)]
 pub struct RenameOp {
@@ -887,17 +900,22 @@ pub fn plan_entry_with(path: &Path, target: RenameTarget, opts: CleanupOptions) 
     let Ok(meta) = fs::metadata(path) else {
         return RenamePlan::Excluded;
     };
-    let is_dir = meta.is_dir();
-    let is_file = meta.is_file();
+    plan_entry_with_metadata(path, &meta, target, opts)
+}
 
-    let include = match target {
-        RenameTarget::All => is_file || is_dir,
-        RenameTarget::FilesOnly => is_file,
-        RenameTarget::DirsOnly => is_dir,
-    };
-    if !include {
+/// Like [`plan_entry_with`], for a caller that already holds the entry's
+/// metadata (from [`fs::metadata`], symlinks followed) — saves a second `stat`.
+#[must_use]
+pub fn plan_entry_with_metadata(
+    path: &Path,
+    meta: &fs::Metadata,
+    target: RenameTarget,
+    opts: CleanupOptions,
+) -> RenamePlan {
+    if !target.matches(meta) {
         return RenamePlan::Excluded;
     }
+    let is_dir = meta.is_dir();
 
     let Some(original) = path.file_name().and_then(|n| n.to_str()) else {
         return RenamePlan::Excluded;
