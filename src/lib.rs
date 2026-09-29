@@ -235,22 +235,15 @@ impl CleanupOptions {
 
     /// Apply the enabled fixes in order: mojibake repair first (it restores
     /// the real characters HTML stripping then operates on), then HTML.
+    /// A name with nothing to repair (ASCII for mojibake, no `<` / `&` for
+    /// HTML) is passed through borrowed, without allocating.
     fn apply(self, name: &str) -> Cow<'_, str> {
-        if !self.fix_unicode && !self.fix_html {
-            return Cow::Borrowed(name);
-        }
         let mut out = Cow::Borrowed(name);
         if self.fix_unicode && !out.is_ascii() {
-            let fixed = fix_unicode(&out);
-            if fixed != out.as_ref() {
-                out = Cow::Owned(fixed);
-            }
+            out = Cow::Owned(fix_unicode(&out));
         }
-        if self.fix_html && (out.contains('<') || out.contains('&')) {
-            let fixed = fix_html(&out);
-            if fixed != out.as_ref() {
-                out = Cow::Owned(fixed);
-            }
+        if self.fix_html && out.contains(['<', '&']) {
+            out = Cow::Owned(fix_html(&out));
         }
         out
     }
