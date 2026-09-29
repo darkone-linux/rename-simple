@@ -291,20 +291,21 @@ impl Reporter {
         let matched_word = plural_entries(matched);
         let renamed_word = plural_entries(self.renamed);
         let errors_word = plural_errors(self.errors);
-        if self.duplicates > 0 {
-            println!(
-                "{matched} {matched_word} matched, {} {renamed_word} renamed, {} {} removed, {} {errors_word}.",
-                self.renamed,
+        // The duplicate segment only shows up when there is something to say,
+        // keeping the usual summary as short as it has always been.
+        let duplicates = if self.duplicates > 0 {
+            format!(
+                ", {} {} removed",
                 self.duplicates,
-                plural_duplicates(self.duplicates),
-                self.errors
-            );
+                plural_duplicates(self.duplicates)
+            )
         } else {
-            println!(
-                "{matched} {matched_word} matched, {} {renamed_word} renamed, {} {errors_word}.",
-                self.renamed, self.errors
-            );
-        }
+            String::new()
+        };
+        println!(
+            "{matched} {matched_word} matched, {} {renamed_word} renamed{duplicates}, {} {errors_word}.",
+            self.renamed, self.errors
+        );
     }
 }
 
@@ -318,33 +319,31 @@ impl Reporter {
 /// An already existing destination is an error, except under `-D` when it is a
 /// strict duplicate of the source (see `resolve_existing`), in which case the
 /// source is deleted instead.
-fn filter_conflicts(
-    mut ops: Vec<RenameOp>,
-    config: &Config,
-    reporter: &mut Reporter,
-) -> Vec<RenameOp> {
+fn filter_conflicts(ops: Vec<RenameOp>, config: &Config, reporter: &mut Reporter) -> Vec<RenameOp> {
     let mut dest_count: HashMap<&Path, usize> = HashMap::with_capacity(ops.len());
     for op in &ops {
         *dest_count.entry(op.to.as_path()).or_insert(0) += 1;
     }
 
-    let mut keep = Vec::with_capacity(ops.len());
-    for op in &ops {
-        if dest_count[op.to.as_path()] > 1 {
-            reporter.error(&op.from, "Multiple entries would produce this name");
-            keep.push(false);
-        } else if op.to.exists() {
-            resolve_existing(op, config, reporter);
-            keep.push(false);
-        } else {
-            keep.push(true);
-        }
-    }
-    drop(dest_count);
+    let keep: Vec<bool> = ops
+        .iter()
+        .map(|op| {
+            if dest_count[op.to.as_path()] > 1 {
+                reporter.error(&op.from, "Multiple entries would produce this name");
+                false
+            } else if op.to.exists() {
+                resolve_existing(op, config, reporter);
+                false
+            } else {
+                true
+            }
+        })
+        .collect();
 
-    let mut keep_iter = keep.into_iter();
-    ops.retain(|_| keep_iter.next().unwrap_or(false));
-    ops
+    ops.into_iter()
+        .zip(keep)
+        .filter_map(|(op, keep)| keep.then_some(op))
+        .collect()
 }
 
 /// Decide what to do with an op whose destination is already taken. Nothing is
