@@ -9,14 +9,6 @@ A small Rust CLI tool that renames files and directories to clean, ASCII-safe sl
 
 ![rename-simple demo](https://raw.githubusercontent.com/darkone-linux/rename-simple/main/assets/rename-simple.png)
 
-> [!WARNING]
-> **Breaking change since 0.4.0.** The directory-scan mode and the
-> `-a`/`--all` and `-r`/`--recursive` options have been removed.
-> `rename-simple` now operates **only** on the paths you give it, like
-> `rename`(1). Use your shell's globbing to select entries:
-> `rename-simple *` instead of `rename-simple -a`, and
-> `rename-simple **/*.pdf` instead of `-r`.
-
 ## What it does
 
 - Transliterates accented and extended Latin characters to ASCII (`é → e`, `ç → c`, `œ → oe`, `ß → ss`…)
@@ -222,8 +214,8 @@ $ rename-simple -v ~/Downloads/*
 
 ## Tips
 
-Since the directory-scan mode is gone, "rename everything in the current
-directory" is now just `rename-simple *`. A shell alias makes it a habit:
+To rename everything in the current directory, run `rename-simple *`. A shell
+alias makes it a habit:
 
 ```bash
 alias rsa='rename-simple *'

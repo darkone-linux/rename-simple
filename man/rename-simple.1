@@ -1,8 +1,8 @@
 .TH RENAME-SIMPLE 1 "2026-09-29" "rename-simple 1.0.0" "User Commands"
 .SH NAME
-rename-simple \- clean filenames to lowercase, ASCII-safe slugs
+rename-simple \- rename files and directories to lowercase ASCII slugs
 .SH SYNOPSIS
-.B rename-simple
+.B rename\-simple
 [\fB\-f\fR | \fB\-d\fR]
 [\fB\-U\fR]
 [\fB\-H\fR]
@@ -14,166 +14,126 @@ rename-simple \- clean filenames to lowercase, ASCII-safe slugs
 [\fB\-V\fR]
 \fIfiles\fR...
 .SH DESCRIPTION
-.B rename-simple
-renames files and/or directories by normalising accented characters, replacing
-spaces and special characters with hyphens, and lowercasing everything.
+.B rename\-simple
+renames each file or directory given as argument to a lowercase ASCII slug.
+Like \fBrename\fR(1), it acts on the arguments themselves, never on the
+contents of a directory: select entries with shell globbing, such as
+\fI*.jpg\fR, or \fIdir/**/*.pdf\fR with \fBzsh\fR or \fBbash\fR
+\fIglobstar\fR. Without arguments, it prints its help.
 .PP
-Each \fIfiles\fR argument is an entry that is renamed \fBitself\fR (like the
-traditional \fBrename\fR(1) command): the program acts on the arguments you
-give it, not on their contents. Globbing is left to the shell, so
-\fBrename-simple\fR \fI*.jpg\fR renames every matching file, and (with a shell
-that supports recursive globs, e.g. \fBzsh\fR or \fBbash\fR with
-\fIglobstar\fR) \fBrename-simple\fR \fIdir/**/*.pdf\fR cleans a whole subtree.
+A name is converted as follows:
+.IP \(bu 2
+accented and non-ASCII letters are transliterated to ASCII: Latin
+(\[u00E9] \(-> e, \[u00DF] \(-> ss, \[u00C6] \(-> ae), ligatures and
+compatibility forms (\[uFB01] \(-> fi, fullwidth letters, superscripts,
+\[u2122] \(-> tm), Greek and Cyrillic (\[u039B] \(-> l, \[u0416] \(-> zh);
+.IP \(bu 2
+letters are lowercased;
+.IP \(bu 2
+any other character becomes a hyphen;
+.IP \(bu 2
+consecutive hyphens and underscores are merged into one underscore if the run
+contains an underscore, into one hyphen otherwise;
+.IP \(bu 2
+leading and trailing hyphens and underscores are removed.
 .PP
-Both files and directories are renamed by default; \fB\-f\fR / \fB\-d\fR act as
-a type filter on the arguments. When \fBno\fR argument is given, the program
-prints its help and exits.
+A file extension is kept and lowercased when it has 1 to 10 ASCII letters or
+digits (\fIPhoto.JPG\fR \(-> \fIphoto.jpg\fR); otherwise it is converted with
+the rest of the name (\fInotes.t\[u00E9]t\fR \(-> \fInotes\-tet\fR). The
+compound extensions \fI.tar.gz\fR, \fI.tar.bz2\fR, \fI.tar.xz\fR and
+\fI.tar.zst\fR are kept whole.
 .PP
-The transformation pipeline is:
-.IP 1. 4
-Transliterate accented and non-ASCII characters to their ASCII equivalents.
-This covers Latin scripts (e.g. \[u00E9] -> e, \[u00DF] -> ss,
-\[u00C6] -> ae), typographic ligatures and compatibility forms
-(\[uFB01] -> fi, fullwidth letters, superscripts, \[u2122] -> tm), and Greek
-and Cyrillic letters through a simple romanisation
-(\[u039B] -> l, \[u0416] -> zh).
-.IP 2. 4
-Replace all remaining special characters with a hyphen (\fB\-\fR).
-.IP 3. 4
-Collapse consecutive hyphens into a single hyphen.
-.IP 4. 4
-Clean underscore/hyphen boundaries (\fI_\-\fR and \fI\-_\fR become \fI_\fR).
-.IP 5. 4
-Collapse consecutive underscores.
-.IP 6. 4
-Strip leading and trailing hyphens and underscores.
+Hidden entries (names starting with a dot) are never renamed. A name that is
+not valid UTF-8 is reported as an error and left unchanged.
 .PP
-The optional cleanup fixes (\fB\-U\fR, \fB\-H\fR, \fB\-A\fR) run \fBbefore\fR
-this pipeline: they repair the name (mojibake, HTML markup) so that the slug
-is computed from the intended text rather than from the damaged one.
+An existing entry is never overwritten. When the new name is already taken,
+or when several arguments would get the same new name, the entry is left
+unchanged and an error is reported. The only exception is \fB\-D\fR, for two
+distinct regular files with identical content.
 .PP
-Compound extensions (\fI.tar.gz\fR, \fI.tar.bz2\fR, \fI.tar.xz\fR,
-\fI.tar.zst\fR) are preserved. An extension is only kept separate when it
-consists entirely of ASCII alphanumeric characters and is at most 10 characters
-long. Extensions containing accents, spaces, punctuation or exceeding 10
-characters are re-absorbed into the filename stem and processed through the
-full transliteration pipeline.
-.PP
-Hidden files (names starting with a dot) are never modified. An entry whose
-name is not valid UTF-8 cannot be transformed and is reported as an error
-(\fB[E]\fR), leaving it untouched.
-.PP
-An existing destination is never overwritten, and no entry is ever deleted
-without \fB\-D\fR. When the cleaned name is already taken, the source and the
-destination are compared and the conflict is reported as an error
-(\fB[E]\fR) naming what stands in the way. If both are regular files with
-\fBstrictly identical\fR content (compared byte for byte), the rename would
-merely duplicate what is already there: \fB\-D\fR/\fB\-\-delete\-duplicates\fR
-then deletes the redundant source and reports it as a warning (\fB[W]\fR).
-Every other conflict leaves both sides untouched, with or without \fB\-D\fR:
-differing content, a directory, a symlink on either side, or two names for the
-same entry such as a hard link. Under \fB\-n\fR/\fB\-\-dry\-run\fR the
-duplicate is only announced, never deleted.
-.PP
-By default the program prints one line per renamed entry (\fB[R]\fR), deleted
-duplicate (\fB[W]\fR) or error (\fB[E]\fR) followed by a one-line summary. Use
-\fB\-v\fR/\fB\-\-verbose\fR to also list untouched entries (\fB[X]\fR), or
-\fB\-q\fR/\fB\-\-quiet\fR to suppress all output. Marks and arrows are
-colourised when the output is a terminal.
+Each renamed entry is printed as an \fB[R]\fR line on standard output, each
+deleted duplicate as \fB[W]\fR and each error as \fB[E]\fR on standard error,
+followed by a summary line. Marks are coloured when the output is a terminal.
 .SH OPTIONS
 .TP
 \fB\-f\fR, \fB\-\-files\-only\fR
-Rename files only.
+Rename files only; directory arguments are ignored.
 .TP
 \fB\-d\fR, \fB\-\-dirs\-only\fR
-Rename directories only.
+Rename directories only; file arguments are ignored.
 .TP
 \fB\-U\fR, \fB\-\-fix\-unicode\fR
-Repair mojibake before renaming: names whose UTF-8 bytes were wrongly decoded
-as Latin-1 or Windows-1252 (e.g. \fICafÃ©.txt\fR is treated as
-\fICaf\[u00E9].txt\fR and becomes \fIcafe.txt\fR). The repair is all-or-nothing:
-a name that is not fully re-decodable is left untouched, so correctly named
-files are never corrupted. Double mojibake is handled.
+Before renaming, repair mojibake: UTF-8 text wrongly decoded as Latin-1 or
+Windows-1252. \fICaf\[u00C3]\[u00A9].txt\fR becomes \fIcafe.txt\fR. Double
+mojibake is repaired too. A name that cannot be fully decoded is left as is,
+so a correct name is never altered.
 .TP
 \fB\-H\fR, \fB\-\-fix\-html\fR
-Strip HTML tags and decode HTML entities before renaming (e.g.
-\fI<b>Tom &amp; Jerry.mp4\fR is treated as \fITom & Jerry.mp4\fR and becomes
-\fItom\-jerry.mp4\fR). Block\-level tags (\fI<br>\fR, \fI<p>\fR, \fI<div>\fR,
-\fI<li>\fR, \fI<h1>\fR\[en]\fI<h6>\fR, ...) are replaced by a space so the
-surrounding words stay separated (\fIdata<br>client\fR becomes
-\fIdata\-client\fR), while inline tags (\fI<b>\fR, \fI<i>\fR, \fI<span>\fR, ...)
-are removed with no gap (\fIclient<b>s\fR becomes \fIclients\fR). Named
-(\fI&eacute;\fR), decimal (\fI&#233;\fR) and hexadecimal (\fI&#xE9;\fR) entities
-are supported; anything that does not parse as a tag or entity is kept verbatim.
-A decoded slash (\fI&#47;\fR) is an ordinary special character that never
-splits the name: \fIReport &#47; Final.txt\fR becomes
-\fIreport\-final.txt\fR.
+Before renaming, strip HTML tags and decode HTML entities.
+\fI<b>Tom &amp; Jerry.mp4\fR becomes \fItom\-jerry.mp4\fR. Block tags
+(\fI<br>\fR, \fI<p>\fR, \fI<div>\fR, \fI<li>\fR, \fI<h1>\fR to \fI<h6>\fR...)
+become a space; inline tags (\fI<b>\fR, \fI<i>\fR, \fI<span>\fR...) are
+removed. Named (\fI&eacute;\fR), decimal (\fI&#233;\fR) and hexadecimal
+(\fI&#xE9;\fR) entities are decoded; any other text is kept. A decoded slash
+(\fI&#47;\fR) is converted like any other character:
+\fIReport &#47; Final.txt\fR becomes \fIreport\-final.txt\fR.
 .TP
 \fB\-A\fR, \fB\-\-fix\-all\fR
-Apply every cleanup fix. Currently equivalent to \fB\-U\fR \fB\-H\fR; future
-cleanup fixes will be folded into this option.
-.TP
-\fB\-q\fR, \fB\-\-quiet\fR
-Print nothing at all.
-.TP
-\fB\-v\fR, \fB\-\-verbose\fR
-Show every entry, including the ones left untouched, plus the summary.
+Apply all cleanup fixes: \fB\-U\fR and \fB\-H\fR.
 .TP
 \fB\-D\fR, \fB\-\-delete\-duplicates\fR
-Delete a source that is a byte\-for\-byte duplicate of an already existing
-destination, instead of reporting the name clash as an error. Only applies to
-two distinct regular files with strictly identical content: symlinks are
-neither followed nor deleted, since a link is not a copy of the bytes it points
-at. It is \fBnot\fR implied by \fB\-A\fR/\fB\-\-fix\-all\fR, which only repairs
-names.
+When the new name is taken by a distinct regular file with identical content,
+compared byte for byte, delete the source instead of reporting an error.
+Symbolic links are never compared or deleted. Not implied by \fB\-A\fR.
 .TP
 \fB\-n\fR, \fB\-\-dry\-run\fR
-Show what would be renamed without actually renaming any entry.
+Show what would be done without renaming or deleting anything.
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Also list unchanged entries, as \fB[X]\fR lines.
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Print nothing, not even errors.
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print a help message and exit.
+Print help and exit.
 .TP
 \fB\-V\fR, \fB\-\-version\fR
-Print version information and exit.
+Print the version and exit.
 .SH EXIT STATUS
 .TP
 .B 0
-All entries were renamed successfully (or no entries needed renaming).
-Per-entry failures (missing entry, conflict, I/O error) and deleted duplicates
-are reported on standard error but do not change the exit status.
+The command line is valid. Errors on individual entries (missing entry,
+conflict, I/O error) do not change the exit status.
 .TP
 .B 2
-Invalid command-line arguments, such as an unknown option or \fB\-f\fR combined
-with \fB\-d\fR (reported by the argument parser before any entry is touched).
+The command line is invalid, for example an unknown option or \fB\-f\fR
+with \fB\-d\fR. Nothing is renamed.
 .SH EXAMPLES
-.TP
-Rename specific files (the arguments themselves)
-.B rename-simple
-"Mon Fichier.txt" *.jpg
-.TP
-Rename both files and directories in the current directory
-.B rename-simple
-*
-.TP
-Rename files only, with verbose output
-.B rename-simple
-\fB\-f\fR \fB\-v\fR ~/Downloads/*
-.TP
-Preview what would be renamed without touching anything
-.B rename-simple
-\fB\-n\fR \fB\-v\fR *
-.TP
-Repair mojibake and strip HTML markup while renaming
-.B rename-simple
-\fB\-A\fR ~/Downloads/*
-.TP
-Rename every PDF under a directory (zsh / bash globstar)
-.B rename-simple
-~/Documents/**/*.pdf
-.TP
-Rename directories only
-.B rename-simple
-\fB\-d\fR *
+Rename a file and every JPEG image of the current directory:
+.PP
+.RS
+\fBrename\-simple\fR "Mon Fichier.txt" *.jpg
+.RE
+.PP
+Preview the changes, unchanged entries included:
+.PP
+.RS
+\fBrename\-simple \-n \-v\fR *
+.RE
+.PP
+Rename the files only, repairing mojibake and HTML markup:
+.PP
+.RS
+\fBrename\-simple \-f \-A\fR ~/Downloads/*
+.RE
+.PP
+Rename every PDF file of a tree (\fBzsh\fR, or \fBbash\fR with
+\fIglobstar\fR):
+.PP
+.RS
+\fBrename\-simple\fR ~/Documents/**/*.pdf
+.RE
 .SH AUTHOR
 Written by Guillaume Pon\[,c]on.
 .SH REPORTING BUGS
