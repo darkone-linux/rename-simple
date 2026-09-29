@@ -582,68 +582,45 @@ pub fn fix_html(name: &str) -> String {
 ///    separators.
 #[must_use]
 pub fn transform_stem(stem: &str) -> String {
-    if stem.is_empty() {
-        return String::new();
-    }
-
     let mut out = String::with_capacity(stem.len());
     let mut pending_sep: Option<char> = None;
 
     if stem.is_ascii() {
         for &b in stem.as_bytes() {
-            match b {
-                b'0'..=b'9' | b'a'..=b'z' => {
-                    if let Some(sep) = pending_sep.take() {
-                        out.push(sep);
-                    }
-                    out.push(b as char);
-                }
-                b'A'..=b'Z' => {
-                    if let Some(sep) = pending_sep.take() {
-                        out.push(sep);
-                    }
-                    out.push((b + 32) as char);
-                }
-                b'_' => {
-                    if !out.is_empty() {
-                        pending_sep = Some('_');
-                    }
-                }
-                _ => {
-                    if !out.is_empty() && pending_sep.is_none() {
-                        pending_sep = Some('-');
-                    }
-                }
-            }
+            push_piece(&mut out, &mut pending_sep, ASCII_MAP[usize::from(b)]);
         }
     } else {
         for c in stem.nfkd() {
-            let s = transliterate_char(c);
-            if s.is_empty() {
-                continue;
-            }
-            match s {
-                "-" => {
-                    if !out.is_empty() && pending_sep.is_none() {
-                        pending_sep = Some('-');
-                    }
-                }
-                "_" => {
-                    if !out.is_empty() {
-                        pending_sep = Some('_');
-                    }
-                }
-                alnum => {
-                    if let Some(sep) = pending_sep.take() {
-                        out.push(sep);
-                    }
-                    out.push_str(alnum);
-                }
-            }
+            push_piece(&mut out, &mut pending_sep, transliterate_char(c));
         }
     }
 
     out
+}
+
+/// Append one transliterated piece to the slug being built. Separators are
+/// deferred until the next alphanumeric piece, so consecutive ones collapse
+/// (`_` taking precedence over `-`) and leading / trailing ones are dropped.
+fn push_piece(out: &mut String, pending_sep: &mut Option<char>, piece: &str) {
+    match piece {
+        "" => {}
+        "-" => {
+            if !out.is_empty() && pending_sep.is_none() {
+                *pending_sep = Some('-');
+            }
+        }
+        "_" => {
+            if !out.is_empty() {
+                *pending_sep = Some('_');
+            }
+        }
+        alnum => {
+            if let Some(sep) = pending_sep.take() {
+                out.push(sep);
+            }
+            out.push_str(alnum);
+        }
+    }
 }
 
 /// Known compound extensions that must be kept together, stored with their
