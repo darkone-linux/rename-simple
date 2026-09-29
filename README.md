@@ -156,8 +156,10 @@ strips tags and decodes named (`&eacute;`), decimal (`&#233;`) and hex
 (`&#xE9;`) entities. Block-level tags (`<br>`, `<p>`, `<div>`, `<li>`,
 `<h1>`–`<h6>`, …) are replaced by a space so the surrounding words stay
 separated (`data<br>client` → `data-client`), while inline tags (`<b>`, `<i>`,
-`<span>`, …) vanish with no gap (`client<b>s` → `clients`). `-A`/`--fix-all`
-applies every cleanup fix.
+`<span>`, …) vanish with no gap (`client<b>s` → `clients`). A decoded slash
+(`&#47;`) is an ordinary special character that never splits the name
+(`Report &#47; Final.txt` → `report-final.txt`). `-A`/`--fix-all` applies every
+cleanup fix.
 
 ### Conflicts and duplicates
 

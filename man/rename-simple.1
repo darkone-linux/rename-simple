@@ -1,4 +1,4 @@
-.TH RENAME-SIMPLE 1 "2026-09-09" "rename-simple 0.7.2" "User Commands"
+.TH RENAME-SIMPLE 1 "2026-09-29" "rename-simple 1.0.0" "User Commands"
 .SH NAME
 rename-simple \- clean filenames to lowercase, ASCII-safe slugs
 .SH SYNOPSIS
@@ -72,8 +72,8 @@ merely duplicate what is already there: \fB\-D\fR/\fB\-\-delete\-duplicates\fR
 then deletes the redundant source and reports it as a warning (\fB[W]\fR).
 Every other conflict leaves both sides untouched, with or without \fB\-D\fR:
 differing content, a directory, a symlink on either side, or two names for the
-same entry such as a hard link. Under \fB\-n\fR/\fB\-\-dry\-run\fR the duplicate is only announced,
-never deleted.
+same entry such as a hard link. Under \fB\-n\fR/\fB\-\-dry\-run\fR the
+duplicate is only announced, never deleted.
 .PP
 By default the program prints one line per renamed entry (\fB[R]\fR), deleted
 duplicate (\fB[W]\fR) or error (\fB[E]\fR) followed by a one-line summary. Use
@@ -105,6 +105,9 @@ surrounding words stay separated (\fIdata<br>client\fR becomes
 are removed with no gap (\fIclient<b>s\fR becomes \fIclients\fR). Named
 (\fI&eacute;\fR), decimal (\fI&#233;\fR) and hexadecimal (\fI&#xE9;\fR) entities
 are supported; anything that does not parse as a tag or entity is kept verbatim.
+A decoded slash (\fI&#47;\fR) is an ordinary special character that never
+splits the name: \fIReport &#47; Final.txt\fR becomes
+\fIreport\-final.txt\fR.
 .TP
 \fB\-A\fR, \fB\-\-fix\-all\fR
 Apply every cleanup fix. Currently equivalent to \fB\-U\fR \fB\-H\fR; future
@@ -139,8 +142,9 @@ All entries were renamed successfully (or no entries needed renaming).
 Per-entry failures (missing entry, conflict, I/O error) and deleted duplicates
 are reported on standard error but do not change the exit status.
 .TP
-.B 1
-An error occurred (invalid command-line arguments).
+.B 2
+Invalid command-line arguments, such as an unknown option or \fB\-f\fR combined
+with \fB\-d\fR (reported by the argument parser before any entry is touched).
 .SH EXAMPLES
 .TP
 Rename specific files (the arguments themselves)
