@@ -34,6 +34,11 @@ bin` copies it to `target/pkgs/rename-simple`). A `cargo build` inside the
 dev shell links against `/nix/store` and does not run on other
 distributions: `just _check_portable <binary>` rejects such a binary.
 
+`just package deb` builds the `.deb` with `dpkg-deb --root-owner-group`, then
+`just _check_deb <file>` checks it the way dpkg sees it: readable control
+fields, every entry owned by root with the expected modes, a static binary,
+and a `dpkg --install` into a scratch root.
+
 ### Guards
 
 `just release` aborts early if:

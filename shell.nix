@@ -25,6 +25,7 @@ pkgs.mkShell {
     cargo
     cargo-audit
     clippy
+    dpkg # builds and checks the .deb (`just package deb`)
     gh
     just
     nixfmt

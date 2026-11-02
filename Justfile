@@ -4,7 +4,9 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 version := `sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml`
-arch := `dpkg --print-architecture 2>/dev/null || echo amd64`
+# Debian architecture of this machine, which is also the one `nix build .#static`
+# targets; without dpkg, map the kernel's name instead of assuming amd64.
+arch := `dpkg --print-architecture 2>/dev/null || case "$(uname -m)" in x86_64) echo amd64 ;; aarch64) echo arm64 ;; *) uname -m ;; esac`
 
 # Justfile help
 _default:
@@ -235,44 +237,76 @@ _pkgs_bin:
         target/pkgs/rename-simple
     just _check_portable target/pkgs/rename-simple
 
-# Build Debian .deb package
+# Check a .deb the way dpkg sees it: readable control fields, every entry owned
+# by root with sane modes, a static binary, and a real install into a scratch
+# root (`dpkg --root`, no privilege needed).
+_check_deb deb:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    deb=$(realpath "{{ deb }}")
+    dpkg-deb --field "$deb" Package Version Architecture Maintainer
+    contents=$(dpkg-deb --contents "$deb")
+    bad=$(awk '$2 != "root/root"' <<< "$contents")
+    if [ -n "$bad" ]; then
+        echo "error: $deb has entries not owned by root:" >&2
+        echo "$bad" >&2
+        exit 1
+    fi
+    bad=$(awk '($1 ~ /^d/ && $1 != "drwxr-xr-x") ||
+               ($1 ~ /^-/ && $6 ~ /^\.\/usr\/bin\// && $1 != "-rwxr-xr-x") ||
+               ($1 ~ /^-/ && $6 !~ /^\.\/usr\/bin\// && $1 != "-rw-r--r--")' <<< "$contents")
+    if [ -n "$bad" ]; then
+        echo "error: $deb has unexpected modes:" >&2
+        echo "$bad" >&2
+        exit 1
+    fi
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    mkdir -p "$tmp/var/lib/dpkg/updates" "$tmp/var/lib/dpkg/info" "$tmp/var/lib/dpkg/triggers"
+    touch "$tmp/var/lib/dpkg/status" "$tmp/var/lib/dpkg/available"
+    dpkg --force-not-root --force-script-chrootless --root="$tmp" --install "$deb"
+    just _check_portable "$tmp/usr/bin/rename-simple"
+    "$tmp/usr/bin/rename-simple" --version
+    echo "$deb: valid, root-owned, installs with dpkg"
+
+# Build Debian .deb package (static binary + man page), then check it
 _pkgs_deb: _pkgs_bin
+    #!/usr/bin/env bash
+    set -euo pipefail
+    deb="target/pkgs/debian/rename-simple_{{ version }}_{{ arch }}.deb"
+    root=target/pkgs/debian/root
     rm -rf target/pkgs/debian
-    mkdir -p target/pkgs/debian/usr/bin \
-             target/pkgs/debian/usr/share/man/man1 \
-             target/pkgs/debian/DEBIAN
-    cp target/pkgs/rename-simple target/pkgs/debian/usr/bin/
-    chmod 0755 target/pkgs/debian/usr/bin/rename-simple
-    gzip -9cn < man/rename-simple.1 \
-        > target/pkgs/debian/usr/share/man/man1/rename-simple.1.gz
-    INSTALLED_SIZE=$(du -ks target/pkgs/debian/usr | cut -f1); \
+    # Every mode is explicit: the package must not depend on the builder's umask.
+    install -d -m 0755 "$root" "$root/DEBIAN" "$root/usr" "$root/usr/bin" \
+        "$root/usr/share" "$root/usr/share/man" "$root/usr/share/man/man1"
+    install -m 0755 target/pkgs/rename-simple "$root/usr/bin/rename-simple"
+    gzip -9cn < man/rename-simple.1 > "$root/usr/share/man/man1/rename-simple.1.gz"
+    chmod 0644 "$root/usr/share/man/man1/rename-simple.1.gz"
+    installed_size=$(du -ks "$root/usr" | cut -f1)
     printf "%s\n" \
         "Package: rename-simple" \
         "Version: {{ version }}" \
         "Section: utils" \
         "Priority: optional" \
         "Architecture: {{ arch }}" \
-        "Maintainer: Guillaume Ponçon" \
+        "Maintainer: Guillaume Ponçon <darkone@darkone.yt>" \
         "Homepage: https://github.com/darkone-linux/rename-simple" \
-        "Installed-Size: $INSTALLED_SIZE" \
+        "Installed-Size: $installed_size" \
         "Description: Rename files to clean, ASCII-safe slugs" \
         " Renames files and/or directories by normalising accented" \
         " characters, replacing spaces and special chars with '-'," \
         " and lowercasing everything. Compound extensions (.tar.gz," \
         " .tar.bz2, .tar.xz, .tar.zst) are preserved. Hidden files" \
         " are never modified." \
-        > target/pkgs/debian/DEBIAN/control
-    cd target/pkgs/debian \
-        && tar czf control.tar.gz DEBIAN/control \
-        && tar czf data.tar.gz usr \
-        && echo "2.0" > debian-binary \
-        && ar rcs "rename-simple_{{ version }}_{{ arch }}.deb" \
-            debian-binary control.tar.gz data.tar.gz
-    rm -rf target/pkgs/debian/usr \
-           target/pkgs/debian/DEBIAN \
-           target/pkgs/debian/debian-binary \
-           target/pkgs/debian/control.tar.gz \
-           target/pkgs/debian/data.tar.gz
+        > "$root/DEBIAN/control"
+    chmod 0644 "$root/DEBIAN/control"
+    # dpkg-deb lays the archive out the way dpkg reads it (`./control` at the
+    # root of the control archive), and --root-owner-group records every entry
+    # as root:root instead of the builder's uid, which would otherwise own
+    # /usr/bin/rename-simple on the target system.
+    dpkg-deb --root-owner-group --build "$root" "$deb"
+    rm -rf "$root"
+    just _check_deb "$deb"
 
 # Build and verify the Nix flake package
 _pkgs_nix:
