@@ -15,8 +15,8 @@
   # explicit argument.
   system ? builtins.currentSystem,
   pkgs ? import (fetchTarball {
-    url = "https://github.com/NixOS/nixpkgs/archive/c6d65881c5624c9cae5ea6cedef24699b0c0a4c0.tar.gz";
-    sha256 = "1yf4qv3scjygdkg67nibrhbddg3154mv9cxffvykmwcrwfcrrlaq";
+    url = "https://github.com/NixOS/nixpkgs/archive/0bb2eedc20e4739f29e8045034f2828ad7054f8f.tar.gz";
+    sha256 = "008j4dj5yrzww91qvp1lp2c9d1lkwc6i2dpainf5nkdkr3rwj8vy";
   }) { inherit system; },
 }:
 
