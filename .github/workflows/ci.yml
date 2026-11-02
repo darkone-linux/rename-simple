@@ -49,6 +49,23 @@ jobs:
       - name: Check build on MSRV
         run: cargo check --all-features --locked
 
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      # Only the Windows suite: NTFS is case-insensitive, which is what it
+      # checks (a case-only rename must never pass for a duplicate under -D).
+      # The other suites exercise Unix behaviour (symlinks, permission bits,
+      # invalid UTF-8 names).
+      - name: Windows tests
+        run: cargo test --locked --test windows_tests
+
   nix:
     name: Nix flake
     runs-on: ubuntu-latest

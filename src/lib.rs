@@ -771,7 +771,7 @@ pub enum EntryMatch {
 pub fn compare_entries(a: &Path, b: &Path) -> io::Result<EntryMatch> {
     let (meta_a, meta_b) = (fs::symlink_metadata(a)?, fs::symlink_metadata(b)?);
 
-    if is_same_entry(&meta_a, &meta_b) {
+    if is_same_entry(a, &meta_a, b, &meta_b)? {
         return Ok(EntryMatch::SameEntry);
     }
     if !meta_a.is_file() || !meta_b.is_file() {
@@ -787,20 +787,36 @@ pub fn compare_entries(a: &Path, b: &Path) -> io::Result<EntryMatch> {
     }
 }
 
-/// Whether two metadata snapshots describe the same filesystem entry.
+/// Whether two paths name the same filesystem entry.
 ///
-/// Unix compares the `(device, inode)` pair. Elsewhere there is no portable
-/// identity to compare, so the check stays conservative and answers `false`;
-/// the content comparison then decides.
+/// Unix compares the `(device, inode)` pair of the entries themselves, from
+/// `symlink_metadata`. Elsewhere `Metadata` carries no identity, so both
+/// paths are opened and `same-file` compares the volume serial number and
+/// file index of the handles: on a case-insensitive filesystem `Photo.JPG`
+/// and `photo.jpg` are one file, and must never pass for duplicates. An error
+/// propagates instead of being guessed away, so nothing is deleted on doubt.
 #[cfg(unix)]
-fn is_same_entry(a: &fs::Metadata, b: &fs::Metadata) -> bool {
+// Infallible here, but the signature is shared with the non-Unix variant,
+// which opens both paths and can fail.
+#[allow(clippy::unnecessary_wraps)]
+fn is_same_entry(
+    _a: &Path,
+    meta_a: &fs::Metadata,
+    _b: &Path,
+    meta_b: &fs::Metadata,
+) -> io::Result<bool> {
     use std::os::unix::fs::MetadataExt;
-    a.dev() == b.dev() && a.ino() == b.ino()
+    Ok(meta_a.dev() == meta_b.dev() && meta_a.ino() == meta_b.ino())
 }
 
 #[cfg(not(unix))]
-fn is_same_entry(_a: &fs::Metadata, _b: &fs::Metadata) -> bool {
-    false
+fn is_same_entry(
+    a: &Path,
+    _meta_a: &fs::Metadata,
+    b: &Path,
+    _meta_b: &fs::Metadata,
+) -> io::Result<bool> {
+    same_file::is_same_file(a, b)
 }
 
 /// Byte-for-byte comparison of two files, streamed through the reader buffers

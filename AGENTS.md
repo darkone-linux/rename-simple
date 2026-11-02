@@ -25,7 +25,8 @@ src/
 tests/
 ├── transform_tests.rs  # Pure unit tests for the transformation pipeline
 ├── cli_tests.rs        # End-to-end CLI integration tests
-└── unix_tests.rs       # Unix-specific tests (symlinks, invalid UTF-8, perms)
+├── unix_tests.rs       # Unix-specific tests (symlinks, invalid UTF-8, perms)
+└── windows_tests.rs    # Windows-specific tests (case-insensitive NTFS), CI job
 man/
 └── rename-simple.1     # Man page (kept in sync with the CLI manually)
 

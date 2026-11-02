@@ -51,6 +51,13 @@ unicode-normalization = "0.1"
 [target.'cfg(target_os = "linux")'.dependencies]
 rustix = { version = "1", features = ["fs"] }
 
+# Outside Unix, std's `Metadata` carries no file identity (the Windows file
+# index is unstable). `same-file` compares the volume serial number and file
+# index of open handles, so `-D` can tell a case-only rename on NTFS (one file,
+# two spellings) from a real duplicate.
+[target.'cfg(not(unix))'.dependencies]
+same-file = "1"
+
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"
