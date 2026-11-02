@@ -45,31 +45,44 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          rename-simple = pkgs.rustPlatform.buildRustPackage {
-            pname = "rename-simple";
-            version = cargoToml.package.version;
-            src = ./.;
-            cargoLock.lockFile = ./Cargo.lock;
 
-            # buildRustPackage installs binaries only. The hand-rolled
-            # derivation this flake replaced also shipped the man page, so
-            # restore it here or `just package nix` silently regresses.
-            # Nix compresses man pages itself: install the uncompressed source.
-            postInstall = ''
-              install -Dm644 man/rename-simple.1 \
-                $out/share/man/man1/rename-simple.1
-            '';
+          # One recipe for two package sets: `pkgs` for the Nix package, and
+          # `pkgs.pkgsStatic` (musl, fully static) for the binary shipped
+          # outside Nix.
+          mkRenameSimple =
+            p:
+            p.rustPlatform.buildRustPackage {
+              pname = "rename-simple";
+              version = cargoToml.package.version;
+              src = ./.;
+              cargoLock.lockFile = ./Cargo.lock;
 
-            meta = {
-              description = cargoToml.package.description;
-              license = pkgs.lib.licenses.mit;
-              mainProgram = "rename-simple";
+              # buildRustPackage installs binaries only. The hand-rolled
+              # derivation this flake replaced also shipped the man page, so
+              # restore it here or `just package nix` silently regresses.
+              # Nix compresses man pages itself: install the uncompressed source.
+              postInstall = ''
+                install -Dm644 man/rename-simple.1 \
+                  $out/share/man/man1/rename-simple.1
+              '';
+
+              meta = {
+                description = cargoToml.package.description;
+                license = p.lib.licenses.mit;
+                mainProgram = "rename-simple";
+              };
             };
-          };
+
+          rename-simple = mkRenameSimple pkgs;
         in
         {
           default = rename-simple;
           rename-simple = rename-simple;
+
+          # No program interpreter and no shared library: runs on any Linux
+          # distribution of the same architecture. The GitHub release and the
+          # .deb ship this one; the Nix package above links against the store.
+          static = mkRenameSimple pkgs.pkgsStatic;
         }
       );
 

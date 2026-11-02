@@ -137,7 +137,7 @@ release:
         echo "GitHub release $tag already exists — checking assets."
         if ! gh release view "$tag" --json assets -q '.assets[].name' \
             | grep -qx 'rename-simple'; then
-            gh release upload "$tag" target/release/rename-simple
+            gh release upload "$tag" target/pkgs/rename-simple
             echo "  → uploaded rename-simple binary"
         else
             echo "  → rename-simple binary already present — skipping"
@@ -153,7 +153,7 @@ release:
     else
         notes=$(awk "/^## \[${v}\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
         gh release create "$tag" --title "$tag" --notes "$notes" \
-            target/release/rename-simple \
+            target/pkgs/rename-simple \
             "target/pkgs/debian/rename-simple_{{ version }}_{{ arch }}.deb"
         echo "GitHub release $tag created with artifacts."
     fi
@@ -172,7 +172,7 @@ release:
 
     echo "Release ${tag} complete ✓"
 
-# Build packages: cargo (crates.io), deb (Debian .deb), nix (NixOS), all (default)
+# Build packages: cargo (crates.io), bin (static binary), deb (Debian .deb), nix (NixOS), all (default)
 [group('packaging')]
 package type="all": _check_is_clean
     #!/usr/bin/env bash
@@ -186,6 +186,9 @@ package type="all": _check_is_clean
         cargo)
             cargo package
             ;;
+        bin)
+            just _pkgs_bin
+            ;;
         deb)
             just _pkgs_deb
             ;;
@@ -193,19 +196,52 @@ package type="all": _check_is_clean
             just _pkgs_nix
             ;;
         *)
-            echo "Usage: just package [all|cargo|deb|nix]" >&2
+            echo "Usage: just package [all|cargo|bin|deb|nix]" >&2
             exit 1
             ;;
     esac
 
+# Fail unless `bin` is static: a binary shipped to other distributions must not
+# need a program interpreter or shared libraries, which a dev-shell build loads
+# from /nix/store (and looks up in a RUNPATH that names a home directory).
+_check_portable bin:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    interp=$(LC_ALL=C readelf -lW "{{ bin }}" | sed -n 's/.*Requesting program interpreter: \(.*\)]$/\1/p')
+    if [ -n "$interp" ]; then
+        echo "error: {{ bin }} needs the program interpreter $interp: ship a static binary" >&2
+        exit 1
+    fi
+    dynamic=$(LC_ALL=C readelf -dW "{{ bin }}" 2>/dev/null || true)
+    if grep -q '(NEEDED)' <<< "$dynamic"; then
+        echo "error: {{ bin }} loads shared libraries:" >&2
+        grep '(NEEDED)' <<< "$dynamic" >&2
+        exit 1
+    fi
+    # An empty RUNPATH (left by patchelf --shrink-rpath) points nowhere.
+    if grep -E '\((RUNPATH|RPATH)\)' <<< "$dynamic" | grep -qv '\[\]$'; then
+        echo "error: {{ bin }} has a library search path:" >&2
+        grep -E '\((RUNPATH|RPATH)\)' <<< "$dynamic" >&2
+        exit 1
+    fi
+    echo "{{ bin }}: static, no interpreter, no shared library"
+
+# Build the static binary shipped outside Nix (GitHub release, .deb) into
+# target/pkgs/rename-simple. `cargo build` inside the dev shell would link it
+# against /nix/store, which other distributions do not have.
+_pkgs_bin:
+    mkdir -p target/pkgs
+    install -m 0755 "$(nix build .#static --no-link --print-out-paths)/bin/rename-simple" \
+        target/pkgs/rename-simple
+    just _check_portable target/pkgs/rename-simple
+
 # Build Debian .deb package
-_pkgs_deb:
-    cargo build --release
+_pkgs_deb: _pkgs_bin
     rm -rf target/pkgs/debian
     mkdir -p target/pkgs/debian/usr/bin \
              target/pkgs/debian/usr/share/man/man1 \
              target/pkgs/debian/DEBIAN
-    cp target/release/rename-simple target/pkgs/debian/usr/bin/
+    cp target/pkgs/rename-simple target/pkgs/debian/usr/bin/
     chmod 0755 target/pkgs/debian/usr/bin/rename-simple
     gzip -9cn < man/rename-simple.1 \
         > target/pkgs/debian/usr/share/man/man1/rename-simple.1.gz
