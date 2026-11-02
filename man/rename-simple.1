@@ -1,4 +1,4 @@
-.TH RENAME-SIMPLE 1 "2026-09-29" "rename-simple 1.0.0" "User Commands"
+.TH RENAME-SIMPLE 1 "2026-11-03" "rename-simple 1.0.0" "User Commands"
 .SH NAME
 rename-simple \- rename files and directories to lowercase ASCII slugs
 .SH SYNOPSIS
@@ -12,6 +12,7 @@ rename-simple \- rename files and directories to lowercase ASCII slugs
 [\fB\-v\fR | \fB\-q\fR]
 [\fB\-h\fR]
 [\fB\-V\fR]
+[\fB\-\-\fR]
 \fIfiles\fR...
 .SH DESCRIPTION
 .B rename\-simple
@@ -20,6 +21,11 @@ Like \fBrename\fR(1), it acts on the arguments themselves, never on the
 contents of a directory: select entries with shell globbing, such as
 \fI*.jpg\fR, or \fIdir/**/*.pdf\fR with \fBzsh\fR or \fBbash\fR
 \fIglobstar\fR. Without arguments, it prints its help.
+.PP
+A file name starting with a hyphen that a glob passes on, such as \fI\-D\fR,
+would be read as an option: an option that is also the name of an existing
+entry makes the command line invalid. Put \fB\-\-\fR before the file names,
+or glob with \fI./*\fR.
 .PP
 A name is converted as follows:
 .IP \(bu 2
@@ -107,8 +113,9 @@ The command line is valid. Errors on individual entries (missing entry,
 conflict, I/O error) do not change the exit status.
 .TP
 .B 2
-The command line is invalid, for example an unknown option or \fB\-f\fR
-with \fB\-d\fR. Nothing is renamed.
+The command line is invalid, for example an unknown option, \fB\-f\fR
+with \fB\-d\fR, or an option that is also the name of an existing entry.
+Nothing is renamed.
 .SH EXAMPLES
 Rename a file and every JPEG image of the current directory:
 .PP
@@ -120,6 +127,12 @@ Preview the changes, unchanged entries included:
 .PP
 .RS
 \fBrename\-simple \-n \-v\fR *
+.RE
+.PP
+Rename every entry of the current directory, whatever its name:
+.PP
+.RS
+\fBrename\-simple\fR ./*
 .RE
 .PP
 Rename the files only, repairing mojibake and HTML markup:

@@ -1,3 +1,4 @@
+use clap::error::ErrorKind;
 use clap::{CommandFactory, Parser};
 use rename_files::{
     compare_entries, plan_entry_with_metadata, CleanupOptions, EntryMatch, RenameOp, RenamePlan,
@@ -5,6 +6,7 @@ use rename_files::{
 };
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -106,6 +108,24 @@ struct Config {
     delete_duplicates: bool,
     target: RenameTarget,
     cleanup: CleanupOptions,
+}
+
+/// The first argument that clap reads as an option although an entry of that
+/// name exists, which is what a glob such as `*` produces in a directory
+/// holding a file called `-D`: the shell hands the name over and clap cannot
+/// tell it from the option. A command line that contains `--` is trusted, as
+/// the user has separated the options from the file names.
+///
+/// `args` excludes the program name. No option takes a value, so every
+/// argument starting with `-` (other than `-` itself) is read as an option.
+fn option_named_like_entry(args: &[OsString]) -> Option<&OsStr> {
+    if args.iter().any(|arg| arg == "--") {
+        return None;
+    }
+    args.iter().map(OsString::as_os_str).find(|arg| {
+        let bytes = arg.as_encoded_bytes();
+        bytes.len() > 1 && bytes[0] == b'-' && Path::new(arg).symlink_metadata().is_ok()
+    })
 }
 
 /// Select what kind of entries to rename from the parsed flags. Without `-f`
@@ -479,10 +499,26 @@ fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) 
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn main() {
-    // `Cli::parse()` exits the process on parse errors and on `--help` /
+    // `Cli::parse_from` exits the process on parse errors and on `--help` /
     // `--version`, so anything reaching the next check already has a
     // syntactically valid command line.
-    let cli = Cli::parse();
+    let args: Vec<OsString> = std::env::args_os().collect();
+    let cli = Cli::parse_from(&args);
+
+    // Refuse to guess before acting, and before `-q` could silence anything:
+    // the "option" may be a file name the shell expanded from a glob.
+    if let Some(arg) = option_named_like_entry(args.get(1..).unwrap_or_default()) {
+        Cli::command()
+            .error(
+                ErrorKind::ArgumentConflict,
+                format!(
+                    "{arg:?} is read as an option but also names an existing file or \
+                     directory\n\n  tip: put '--' before the file names, as in \
+                     'rename-simple -- *', or glob './*' instead of '*'"
+                ),
+            )
+            .exit();
+    }
 
     // Without explicit paths there is nothing to operate on: show help like -h.
     if cli.paths.is_empty() {

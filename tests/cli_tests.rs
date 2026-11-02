@@ -1100,3 +1100,140 @@ fn test_fix_all_does_not_delete_duplicates() {
         "expected an [E] line, got: {stderr}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// File names that look like options (`rename-simple *` meeting a file `-D`)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A directory where `rename-simple *` is dangerous: the glob hands the file
+/// named `-D` to the program, which would read it as the option and delete
+/// `IMG 1.mov` as a duplicate of `img-1.mov`.
+fn dir_with_option_named_file() -> tempfile::TempDir {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("-D"), "").unwrap();
+    fs::write(dir.join("IMG 1.mov"), "same bytes").unwrap();
+    fs::write(dir.join("img-1.mov"), "same bytes").unwrap();
+    temp_dir
+}
+
+#[test]
+fn test_option_named_like_a_file_is_refused() {
+    // What the shell passes for `rename-simple *` in that directory.
+    let temp_dir = dir_with_option_named_file();
+    let dir = temp_dir.path();
+
+    let output = cmd()
+        .args(["-D", "IMG 1.mov", "img-1.mov"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "an ambiguous command line is a usage error"
+    );
+    assert!(dir.join("IMG 1.mov").exists(), "nothing may be deleted");
+    assert!(dir.join("-D").exists(), "nothing may be renamed");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("\"-D\"") && stderr.contains("'--'"),
+        "the error must name the argument and the `--` remedy, got: {stderr}"
+    );
+}
+
+#[test]
+fn test_long_option_named_like_a_file_is_refused() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("--delete-duplicates"), "").unwrap();
+    fs::write(dir.join("IMG 1.mov"), "same bytes").unwrap();
+    fs::write(dir.join("img-1.mov"), "same bytes").unwrap();
+
+    let output = cmd()
+        .args(["--delete-duplicates", "IMG 1.mov", "img-1.mov"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(dir.join("IMG 1.mov").exists(), "nothing may be deleted");
+}
+
+#[test]
+fn test_lone_option_named_like_a_file_is_refused_even_quiet() {
+    // `rename-simple *` in a directory holding only a file named `-q`: the
+    // refusal must be reported, not swallowed by the very option it names.
+    let temp_dir = tempfile::tempdir().unwrap();
+    fs::write(temp_dir.path().join("-q"), "").unwrap();
+
+    let output = cmd()
+        .arg("-q")
+        .current_dir(temp_dir.path())
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("\"-q\""),
+        "the refusal must be printed"
+    );
+}
+
+#[test]
+fn test_option_named_file_after_separator_is_a_file() {
+    // `rename-simple -- *`: after `--` every argument is a file name.
+    let temp_dir = dir_with_option_named_file();
+    let dir = temp_dir.path();
+
+    let output = cmd()
+        .args(["--", "-D", "IMG 1.mov", "img-1.mov"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("d").exists(), "`-D` is renamed like any file");
+    assert!(
+        dir.join("IMG 1.mov").exists(),
+        "-D was not given: the duplicate is only reported"
+    );
+}
+
+#[test]
+fn test_typed_option_before_separator_is_honoured() {
+    // With `--` the options before it are trusted, even when a file of the
+    // same name exists: `rename-simple -n -- *` stays a dry run.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("-n"), "").unwrap();
+    fs::write(dir.join("Mon Fichier.txt"), "x").unwrap();
+
+    let output = cmd()
+        .args(["-n", "--", "Mon Fichier.txt"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("Mon Fichier.txt").exists(), "-n must be honoured");
+    assert!(String::from_utf8_lossy(&output.stdout).contains("mon-fichier.txt"));
+}
+
+#[test]
+fn test_dot_slash_glob_never_reads_names_as_options() {
+    // `rename-simple ./*`: no expanded name can start with `-`.
+    let temp_dir = dir_with_option_named_file();
+    let dir = temp_dir.path();
+
+    let output = cmd()
+        .args(["./-D", "./IMG 1.mov", "./img-1.mov"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("d").exists());
+    assert!(dir.join("IMG 1.mov").exists(), "nothing may be deleted");
+}

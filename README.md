@@ -63,6 +63,11 @@ shell: `rename-simple *.jpg`, or `rename-simple dir/**/*.pdf` with zsh or bash
 restrict renaming to one type. Without arguments, `rename-simple` prints its
 help.
 
+A file name starting with `-` that a glob passes on, such as `-D`, would be
+read as an option: an option that is also the name of an existing entry makes
+the command line invalid. Put `--` before the file names
+(`rename-simple -n -- *`), or glob with `./*` (`rename-simple ./*`).
+
 | Option | Description |
 |---|---|
 | `[files]...` | Entries to rename (files and/or directories) |
@@ -81,7 +86,8 @@ help.
 Renamed entries are printed as `[R]` lines on standard output, deleted
 duplicates (`[W]`) and errors (`[E]`) on standard error, followed by a summary
 line. The exit status is `0` when the command line is valid, even if some
-entries fail, and `2` when it is invalid (unknown option, `-f` with `-d`…).
+entries fail, and `2` when it is invalid (unknown option, `-f` with `-d`,
+option that is also the name of an existing entry…).
 
 ## Examples
 
@@ -195,11 +201,12 @@ $ rename-simple -v *
 
 ## Tips
 
-To rename everything in the current directory, run `rename-simple *`. An alias
-in `~/.bashrc` or `~/.zshrc` makes it shorter:
+To rename everything in the current directory, run `rename-simple ./*`: with
+the `./` prefix, no name can be read as an option. An alias in `~/.bashrc` or
+`~/.zshrc` makes it shorter:
 
 ```bash
-alias rsa='rename-simple *'
+alias rsa='rename-simple ./*'
 ```
 
 ## Running the tests
