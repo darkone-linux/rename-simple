@@ -33,11 +33,14 @@ Requires [Rust](https://www.rust-lang.org/tools/install) 1.85+.
 
 ```bash
 # From crates.io
-cargo install rename-simple
+cargo install --locked rename-simple
 
 # Or from source
-cargo install --path .
+cargo install --locked --path .
 ```
+
+`--locked` builds with the dependency versions of `Cargo.lock`, the ones the
+release was tested and audited with.
 
 ### With Nix
 

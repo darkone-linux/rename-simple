@@ -58,7 +58,7 @@ fix:
 # Install the binary into ~/.cargo/bin
 [group('daily')]
 install:
-    cargo install --path .
+    cargo install --locked --path .
 
 # Remove the installed binary from ~/.cargo/bin
 [group('daily')]
