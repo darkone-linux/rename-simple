@@ -33,6 +33,7 @@ pkgs.mkShell {
     rust-analyzer
     rustc
     rustfmt
+    strace # fails renameat2 on purpose in the NFS fallback test
   ];
 
   shellHook = ''

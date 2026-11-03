@@ -683,3 +683,69 @@ fn test_closed_stderr_does_not_stop_the_renames() {
         "stdout must still carry the report, got: {stdout}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filesystems without RENAME_NOREPLACE (NFS, sshfs, ntfs-3g)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Run rename-simple under `strace`, every `renameat2` call failing with
+/// `errno`: what NFS or a FUSE filesystem without `rename2` (sshfs, ntfs-3g)
+/// answers to `RENAME_NOREPLACE`, or a kernel without `renameat2` (ENOSYS).
+/// `None` when strace is missing or cannot trace here.
+#[cfg(target_os = "linux")]
+fn run_with_renameat2_failing(
+    errno: &str,
+    args: &[&std::path::Path],
+) -> Option<std::process::Output> {
+    let bin = env!("CARGO_BIN_EXE_rename-simple");
+    let strace = |extra: &[&str]| {
+        let mut command = std::process::Command::new("strace");
+        command
+            .args(["-f", "-qq", "-o", "/dev/null"])
+            .args(extra)
+            .arg(bin);
+        command
+    };
+    let probe = strace(&[]).arg("--version").output().ok()?;
+    if !probe.status.success() {
+        return None;
+    }
+    let inject = format!("inject=renameat2:error={errno}");
+    Some(
+        strace(&["-e", "trace=renameat2", "-e", &inject])
+            .args(args)
+            .output()
+            .unwrap(),
+    )
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_rename_falls_back_when_noreplace_is_unsupported() {
+    for errno in ["EINVAL", "ENOSYS", "EOPNOTSUPP"] {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let dir = temp_dir.path();
+        fs::write(dir.join("My File.txt"), "content").unwrap();
+        fs::create_dir(dir.join("My Dir")).unwrap();
+
+        let Some(output) =
+            run_with_renameat2_failing(errno, &[&dir.join("My File.txt"), &dir.join("My Dir")])
+        else {
+            eprintln!("skipping: strace is missing or cannot trace here");
+            return;
+        };
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{errno}: {stderr}");
+        assert!(
+            stderr.is_empty(),
+            "{errno}: no error expected, got: {stderr}"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("my-file.txt")).unwrap(),
+            "content",
+            "{errno}"
+        );
+        assert!(dir.join("my-dir").is_dir(), "{errno}");
+    }
+}

@@ -579,26 +579,39 @@ fn same_access(a: &Path, b: &Path) -> std::io::Result<bool> {
 /// `filter_conflicts` and the actual rename:
 ///
 /// - **Linux**: `renameat2(AT_FDCWD, from, AT_FDCWD, to, RENAME_NOREPLACE)`
-///   via `rustix` — atomic at the syscall level.
-/// - **Other Unix / Windows**: the same check as `taken`, then
-///   `std::fs::rename`, which replaces an existing destination: an entry
-///   created between the two calls would be overwritten.
+///   via `rustix` — atomic at the syscall level. A filesystem that does not
+///   support the flag (NFS, FUSE without `rename2`: sshfs, ntfs-3g) or a
+///   kernel without `renameat2` rejects the call itself, with `EINVAL`,
+///   `ENOSYS` or `EOPNOTSUPP`: `check_then_rename` takes over, as in `mv -n`.
+/// - **Other Unix / Windows**: `check_then_rename`.
 fn rename_no_clobber(from: &Path, to: &Path) -> std::io::Result<()> {
     #[cfg(target_os = "linux")]
     {
         use rustix::fs::{renameat_with, RenameFlags, CWD};
-        renameat_with(CWD, from, CWD, to, RenameFlags::NOREPLACE).map_err(std::io::Error::from)
+        use rustix::io::Errno;
+        match renameat_with(CWD, from, CWD, to, RenameFlags::NOREPLACE) {
+            Err(Errno::INVAL | Errno::NOSYS | Errno::OPNOTSUPP) => check_then_rename(from, to),
+            result => result.map_err(std::io::Error::from),
+        }
     }
     #[cfg(not(target_os = "linux"))]
     {
-        match to.symlink_metadata() {
-            Ok(_) => Err(std::io::Error::new(
-                std::io::ErrorKind::AlreadyExists,
-                "destination exists",
-            )),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => std::fs::rename(from, to),
-            Err(e) => Err(e),
-        }
+        check_then_rename(from, to)
+    }
+}
+
+/// Rename `from` to `to` unless an entry already holds the name `to`, checked
+/// as in `taken`. Two calls, not one: `std::fs::rename` replaces an existing
+/// destination, so an entry created between the check and the rename would
+/// be overwritten.
+fn check_then_rename(from: &Path, to: &Path) -> std::io::Result<()> {
+    match to.symlink_metadata() {
+        Ok(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            "destination exists",
+        )),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => std::fs::rename(from, to),
+        Err(e) => Err(e),
     }
 }
 
