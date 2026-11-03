@@ -85,7 +85,9 @@ the command line invalid. Put `--` before the file names
 
 Renamed entries are printed as `[R]` lines on standard output, deleted
 duplicates (`[W]`) and errors (`[E]`) on standard error, followed by a summary
-line. The exit status is `0` when the command line is valid, even if some
+line. Control and bidirectional formatting characters in names are printed
+escaped (`\n`, `\u{1b}`, `\u{202e}`): a name cannot drive the terminal or add a
+line to the report. The exit status is `0` when the command line is valid, even if some
 entries fail, and `2` when it is invalid (unknown option, `-f` with `-d`,
 option that is also the name of an existing entry…).
 

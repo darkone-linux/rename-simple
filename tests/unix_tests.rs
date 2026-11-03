@@ -308,3 +308,129 @@ fn test_type_filter_stays_silent_on_invalid_utf8() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.is_empty(), "expected no output, got: {stderr}");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Names printed on the terminal
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Fail if `stream` carries a character a file name must never send raw to the
+/// terminal: C0 and C1 controls (ESC, BEL, CSI…), line and paragraph
+/// separators, bidirectional formatting characters. The newlines ending the
+/// report lines are the only controls allowed.
+fn assert_no_raw_controls(stream: &str) {
+    let raw = stream.chars().find(|&c| {
+        (c.is_control() && c != '\n')
+            || matches!(
+                c,
+                '\u{061c}'
+                    | '\u{200e}'
+                    | '\u{200f}'
+                    | '\u{2028}'
+                    | '\u{2029}'
+                    | '\u{202a}'..='\u{202e}'
+                    | '\u{2066}'..='\u{2069}'
+            )
+    });
+    assert_eq!(raw, None, "raw control character in: {stream:?}");
+}
+
+#[test]
+fn test_escape_sequences_in_a_name_are_printed_escaped() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    // Clears the screen, then sets the terminal title.
+    let name = "Evil\x1b[2J\x1b]0;pwned\x07 name.txt";
+    fs::write(dir.join(name), "x").unwrap();
+
+    let output = cmd().arg("-n").arg(dir.join(name)).output().unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_no_raw_controls(&stdout);
+    assert!(
+        stdout.contains(r"Evil\u{1b}[2J\u{1b}]0;pwned\u{7} name.txt -> "),
+        "expected the escaped name, got: {stdout:?}"
+    );
+}
+
+#[test]
+fn test_newline_in_a_name_cannot_forge_a_report_line() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    let name = "Two\n[R] .: fake.txt -> fake.txt";
+    fs::write(dir.join(name), "x").unwrap();
+
+    let output = cmd().arg("-n").arg(dir.join(name)).output().unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 2, "one [R] line, then the summary: {stdout:?}");
+    assert!(
+        lines[0].contains(r"Two\n[R] .: fake.txt -> fake.txt -> "),
+        "expected the escaped name, got: {stdout:?}"
+    );
+}
+
+#[test]
+fn test_control_characters_in_the_directory_are_printed_escaped() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let parent = temp_dir.path().join("Evil\x1b]0;pwned\x07");
+    fs::create_dir(&parent).unwrap();
+    fs::write(parent.join("File A.txt"), "x").unwrap();
+
+    let output = cmd()
+        .arg("-n")
+        .arg(parent.join("File A.txt"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_no_raw_controls(&stdout);
+    assert!(
+        stdout.contains(r"Evil\u{1b}]0;pwned\u{7}: File A.txt -> file-a.txt"),
+        "expected the escaped directory, got: {stdout:?}"
+    );
+}
+
+#[test]
+fn test_control_characters_in_an_error_line_are_printed_escaped() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    // Not valid UTF-8 either, so the entry is reported as an error on stderr.
+    let bad_path = temp_dir
+        .path()
+        .join(OsStr::from_bytes(b"Bad\x1b[2J\xff.txt"));
+    fs::write(&bad_path, "x").unwrap();
+
+    let output = cmd().arg(&bad_path).output().unwrap();
+
+    assert!(output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert_no_raw_controls(&stderr);
+    assert!(
+        stderr.contains(r"Bad\u{1b}[2J"),
+        "expected the escaped name, got: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_bidi_and_c1_controls_in_a_name_are_printed_escaped() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    // RIGHT-TO-LEFT OVERRIDE displays the rest of the line reversed, U+009B
+    // is the 8-bit CSI some terminals honour, U+2028 breaks the line in some
+    // viewers.
+    let name = "Report\u{202e}fdp\u{9b}2J\u{2028}x.exe";
+    fs::write(dir.join(name), "x").unwrap();
+
+    let output = cmd().arg("-n").arg(dir.join(name)).output().unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_no_raw_controls(&stdout);
+    assert!(
+        stdout.contains(r"Report\u{202e}fdp\u{9b}2J\u{2028}x.exe -> "),
+        "expected the escaped name, got: {stdout:?}"
+    );
+}

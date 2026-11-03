@@ -11,12 +11,49 @@ use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::process;
 
-/// Lossy display name for a path, with a stable fallback when `file_name()`
-/// is `None` (e.g. a path ending in `..`). Avoids the panicky `unwrap()` on
-/// `file_name()` in the rename / conflict reporting code paths.
+/// Lossy display name for a path, escaped by `terminal_safe`, with a stable
+/// fallback when `file_name()` is `None` (e.g. a path ending in `..`). Avoids
+/// the panicky `unwrap()` on `file_name()` in the rename / conflict reporting
+/// code paths.
 fn display_name(path: &Path) -> Cow<'_, str> {
     path.file_name()
-        .map_or(Cow::Borrowed("?"), |n| n.to_string_lossy())
+        .map_or(Cow::Borrowed("?"), |n| terminal_safe(n.to_string_lossy()))
+}
+
+/// Whether a character from a name must be escaped before it is printed: C0
+/// and C1 controls (newline, ESC, BEL, the 8-bit CSI…), the line and paragraph
+/// separators, and the bidirectional formatting characters.
+fn needs_escape(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c,
+            '\u{061c}'
+                | '\u{200e}'
+                | '\u{200f}'
+                | '\u{2028}'
+                | '\u{2029}'
+                | '\u{202a}'..='\u{202e}'
+                | '\u{2066}'..='\u{2069}'
+        )
+}
+
+/// `text` with every character of `needs_escape` replaced by its Rust escape
+/// (`\n`, `\u{1b}`, `\u{202e}`). Printed raw, a file name could drive the
+/// terminal (clear the screen, set the title), add fake lines to the report,
+/// or display the rest of the line reversed.
+fn terminal_safe(text: Cow<'_, str>) -> Cow<'_, str> {
+    if !text.chars().any(needs_escape) {
+        return text;
+    }
+    let mut escaped = String::with_capacity(text.len() + 16);
+    for c in text.chars() {
+        if needs_escape(c) {
+            escaped.extend(c.escape_debug());
+        } else {
+            escaped.push(c);
+        }
+    }
+    Cow::Owned(escaped)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -212,7 +249,7 @@ fn plural_errors(n: usize) -> &'static str {
 /// directory is shown as `.`. Coloured only when `tty` is set.
 fn location(path: &Path, tty: bool) -> String {
     let dir = match path.parent() {
-        Some(p) if !p.as_os_str().is_empty() => p.to_string_lossy(),
+        Some(p) if !p.as_os_str().is_empty() => terminal_safe(p.to_string_lossy()),
         _ => Cow::Borrowed("."),
     };
     if tty {

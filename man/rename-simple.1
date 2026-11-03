@@ -60,6 +60,9 @@ distinct regular files with identical content.
 Each renamed entry is printed as an \fB[R]\fR line on standard output, each
 deleted duplicate as \fB[W]\fR and each error as \fB[E]\fR on standard error,
 followed by a summary line. Marks are coloured when the output is a terminal.
+Control and bidirectional formatting characters in names are printed escaped
+(\fI\en\fR, \fI\eu{1b}\fR, \fI\eu{202e}\fR): a name cannot drive the terminal
+or add a line to the report.
 .SH OPTIONS
 .TP
 \fB\-f\fR, \fB\-\-files\-only\fR
