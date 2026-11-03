@@ -202,7 +202,7 @@ $ rename-simple -D *
 ```
 [W] .: IMG 9572.mov -> Identical duplicate, source deleted
 [E] .: VID 20260819.mp4 -> File name already exists (2 different files)
-4 entries matched, 0 entry renamed, 1 duplicate removed, 1 error.
+4 entries matched, 0 entry renamed, 1 duplicate deleted, 1 error.
 ```
 
 `-A` does not imply `-D`, and `-D` with `-n` only announces the deletion. Every

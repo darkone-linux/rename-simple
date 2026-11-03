@@ -901,7 +901,7 @@ fn test_cleanup_flags_combine_with_dry_run() {
 #[test]
 fn test_identical_duplicate_source_is_deleted() {
     // The destination already exists but holds exactly the same bytes: the
-    // source is a strict duplicate and gets removed instead of erroring out.
+    // source is a strict duplicate and gets deleted instead of erroring out.
     let temp_dir = tempfile::tempdir().unwrap();
     let dir = temp_dir.path();
 
@@ -929,7 +929,7 @@ fn test_identical_duplicate_source_is_deleted() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("1 duplicate removed"),
+        stdout.contains("1 duplicate deleted"),
         "expected the duplicate count in the summary, got: {stdout}"
     );
 }
@@ -1103,8 +1103,8 @@ fn test_duplicate_needs_the_flag_to_be_deleted() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        !stdout.contains("duplicate removed"),
-        "nothing was removed: {stdout}"
+        !stdout.contains("duplicate"),
+        "nothing was deleted: {stdout}"
     );
 }
 
@@ -1365,7 +1365,7 @@ fn test_child_is_renamed_before_its_parent_however_spelled() {
 
 #[test]
 fn test_exit_status_is_0_when_every_entry_is_handled() {
-    // Renamed, already clean, duplicate removed: nothing failed.
+    // Renamed, already clean, duplicate deleted: nothing failed.
     let temp_dir = tempfile::tempdir().unwrap();
     let dir = temp_dir.path();
     fs::write(dir.join("Mon Fichier.txt"), "a").unwrap();

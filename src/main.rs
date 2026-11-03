@@ -377,16 +377,16 @@ impl Reporter {
         let renamed_word = plural(self.renamed, "entry", "entries");
         let errors_word = plural(self.errors, "error", "errors");
         // A dry-run changes nothing: its summary must not claim otherwise.
-        let (renamed_verb, removed_verb) = if self.dry_run {
+        let (renamed_verb, deleted_verb) = if self.dry_run {
             ("would be renamed", "would be deleted")
         } else {
-            ("renamed", "removed")
+            ("renamed", "deleted")
         };
         // The duplicate segment only shows up when there is something to say,
         // keeping the usual summary as short as it has always been.
         let duplicates = if self.duplicates > 0 {
             format!(
-                ", {} {} {removed_verb}",
+                ", {} {} {deleted_verb}",
                 self.duplicates,
                 plural(self.duplicates, "duplicate", "duplicates")
             )

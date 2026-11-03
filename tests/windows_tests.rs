@@ -44,8 +44,8 @@ fn test_delete_duplicates_keeps_the_only_copy_on_a_case_only_rename() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        !stdout.contains("duplicate removed"),
-        "nothing may be removed: {stdout}"
+        !stdout.contains("duplicate"),
+        "nothing may be deleted: {stdout}"
     );
 }
 
