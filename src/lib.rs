@@ -175,34 +175,41 @@ fn fold_lower(c: char) -> char {
 /// 7. Everything else (spaces, punctuation, CJK, emoji…) returns `"-"`.
 #[must_use]
 pub fn transliterate_char(c: char) -> &'static str {
+    transliterate_known(c)
+        .or_else(|| transliterate_decomposable(c))
+        .unwrap_or("-")
+}
+
+/// Steps 1 to 5 of [`transliterate_char`]: the characters the tables know as
+/// they are. `None` for anything else.
+fn transliterate_known(c: char) -> Option<&'static str> {
     if (c as u32) < 128 {
-        return ASCII_MAP[c as usize];
+        return Some(ASCII_MAP[c as usize]);
     }
     if is_combining_mark(c) {
-        return "";
+        return Some("");
     }
     if let Some(s) = special_latin(c) {
-        return s;
+        return Some(s);
     }
     let folded = fold_lower(c);
-    if let Some(s) = greek(folded).or_else(|| cyrillic(folded)) {
-        return s;
-    }
+    greek(folded).or_else(|| cyrillic(folded))
+}
 
-    // NFKD fallback: covers any precomposed letter whose compatibility
-    // decomposition starts with a known base (À, é, Č, Ą, ș, İ, Ａ, ², ά, Й…).
-    if let Some(base) = c.nfkd().find(|x| !is_combining_mark(*x)) {
-        if base != c {
-            if (base as u32) < 128 {
-                return ASCII_MAP[base as usize];
-            }
-            let base = fold_lower(base);
-            if let Some(s) = greek(base).or_else(|| cyrillic(base)) {
-                return s;
-            }
-        }
+/// Step 6 of [`transliterate_char`], the NFKD fallback: covers any
+/// precomposed letter whose compatibility decomposition starts with a known
+/// base (À, é, Č, Ą, ș, İ, Ａ, ², ά, Й…). `None` when `c` does not decompose
+/// or its base is unknown.
+fn transliterate_decomposable(c: char) -> Option<&'static str> {
+    let base = c.nfkd().find(|x| !is_combining_mark(*x))?;
+    if base == c {
+        return None;
     }
-    "-"
+    if (base as u32) < 128 {
+        return Some(ASCII_MAP[base as usize]);
+    }
+    let base = fold_lower(base);
+    greek(base).or_else(|| cyrillic(base))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -645,8 +652,12 @@ pub fn transform_stem(stem: &str) -> String {
             push_piece(&mut out, &mut pending_sep, ASCII_MAP[usize::from(b)]);
         }
     } else {
+        // NFKD has already decomposed every character: the NFKD fallback of
+        // `transliterate_char` would find nothing more, at the cost of one
+        // decomposition per unknown character (CJK, emoji, punctuation…).
         for c in stem.nfkd() {
-            push_piece(&mut out, &mut pending_sep, transliterate_char(c));
+            let piece = transliterate_known(c).unwrap_or("-");
+            push_piece(&mut out, &mut pending_sep, piece);
         }
     }
 

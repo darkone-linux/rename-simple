@@ -224,30 +224,12 @@ fn paint(enabled: bool, code: &'static str, text: &'static str) -> Cow<'static, 
     }
 }
 
-/// "entry" for 0 or 1, "entries" for more than one.
-fn plural_entries(n: usize) -> &'static str {
+/// `one` for 0 or 1, `many` for more than one: "0 error", "2 entries".
+fn plural(n: usize, one: &'static str, many: &'static str) -> &'static str {
     if n > 1 {
-        "entries"
+        many
     } else {
-        "entry"
-    }
-}
-
-/// "duplicate" for 0 or 1, "duplicates" for more than one.
-fn plural_duplicates(n: usize) -> &'static str {
-    if n > 1 {
-        "duplicates"
-    } else {
-        "duplicate"
-    }
-}
-
-/// "error" for 0 or 1, "errors" for more than one.
-fn plural_errors(n: usize) -> &'static str {
-    if n > 1 {
-        "errors"
-    } else {
-        "error"
+        one
     }
 }
 
@@ -388,16 +370,16 @@ impl Reporter {
             return;
         }
         let matched = self.renamed + self.duplicates + self.errors + self.skipped;
-        let matched_word = plural_entries(matched);
-        let renamed_word = plural_entries(self.renamed);
-        let errors_word = plural_errors(self.errors);
+        let matched_word = plural(matched, "entry", "entries");
+        let renamed_word = plural(self.renamed, "entry", "entries");
+        let errors_word = plural(self.errors, "error", "errors");
         // The duplicate segment only shows up when there is something to say,
         // keeping the usual summary as short as it has always been.
         let duplicates = if self.duplicates > 0 {
             format!(
                 ", {} {} removed",
                 self.duplicates,
-                plural_duplicates(self.duplicates)
+                plural(self.duplicates, "duplicate", "duplicates")
             )
         } else {
             String::new()
