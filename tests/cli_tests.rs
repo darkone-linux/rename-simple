@@ -1392,3 +1392,61 @@ fn test_exit_status_is_1_on_a_conflict() {
 
     assert_eq!(output.status.code(), Some(1));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Paths ending in `.` or `..`
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_dot_and_dot_dot_are_refused_with_a_clear_message() {
+    // They name no entry of their own: there is nothing to rename.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::create_dir_all(dir.join("My Dir").join("Sub Dir")).unwrap();
+
+    for path in [".", "..", "My Dir/Sub Dir/.."] {
+        for flags in [&["-n"][..], &[]] {
+            let output = cmd()
+                .current_dir(dir)
+                .args(flags)
+                .arg(path)
+                .output()
+                .unwrap();
+
+            assert_eq!(output.status.code(), Some(1), "{path} {flags:?}");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(!stdout.contains("[R]"), "{path} {flags:?}: {stdout}");
+            assert!(
+                stderr.contains("Cannot rename ., .. or /"),
+                "{path} {flags:?}: got: {stderr}"
+            );
+        }
+    }
+    assert!(dir.join("My Dir").join("Sub Dir").is_dir());
+}
+
+#[test]
+fn test_trailing_dot_names_the_directory_itself() {
+    // `My Dir/.` is `My Dir/`: the dry-run and the real run must agree.
+    for path in ["My Dir/.", "My Dir/./"] {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let dir = temp_dir.path();
+        fs::create_dir(dir.join("My Dir")).unwrap();
+
+        for flags in [&["-n"][..], &[]] {
+            let output = cmd()
+                .current_dir(dir)
+                .args(flags)
+                .arg(path)
+                .output()
+                .unwrap();
+
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert_eq!(output.status.code(), Some(0), "{path} {flags:?}: {stderr}");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(stdout.contains("-> my-dir"), "{path} {flags:?}: {stdout}");
+        }
+        assert!(dir.join("my-dir").is_dir(), "{path}");
+    }
+}

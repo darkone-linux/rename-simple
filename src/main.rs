@@ -12,12 +12,17 @@ use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::{self, ExitCode};
 
-/// Lossy display name for a path, escaped by `terminal_safe`, with a stable
-/// fallback when `file_name()` is `None` (e.g. a path ending in `..`). Avoids
-/// the panicky `unwrap()` on `file_name()` in the rename / conflict reporting
-/// code paths.
+/// Lossy display name for a path, escaped by `terminal_safe`. A path without
+/// a name (`.`, `x/..`, `/`) shows its last component instead, and an empty
+/// path `?`. Avoids the panicky `unwrap()` on `file_name()` in the rename /
+/// conflict reporting code paths.
 fn display_name(path: &Path) -> Cow<'_, str> {
     path.file_name()
+        .or_else(|| {
+            path.components()
+                .next_back()
+                .map(std::path::Component::as_os_str)
+        })
         .map_or(Cow::Borrowed("?"), |n| terminal_safe(n.to_string_lossy()))
 }
 
@@ -702,6 +707,27 @@ fn unreadable_entry(path: &Path, e: &std::io::Error) -> String {
     }
 }
 
+/// `path` without its trailing `.` components: `My Dir/.` names the same
+/// directory as `My Dir/`, but rename(2) refuses a path ending in `.` (EBUSY).
+/// `Path::components` hides a trailing `.`, so the text is checked instead.
+/// The trailing separator is kept, `My Dir/.` becoming `My Dir/`: like the
+/// original, the result designates a directory.
+fn without_trailing_dot(path: &Path) -> Cow<'_, Path> {
+    let text = path.as_os_str().as_encoded_bytes();
+    let is_separator = |b: &u8| std::path::is_separator(char::from(*b));
+    let end = text
+        .iter()
+        .rposition(|b| !is_separator(b))
+        .map_or(0, |i| i + 1);
+    let text = &text[..end];
+    if text.len() < 2 || !text.ends_with(b".") || !is_separator(&text[text.len() - 2]) {
+        return Cow::Borrowed(path);
+    }
+    let mut dir: PathBuf = path.components().collect();
+    dir.push("");
+    Cow::Owned(dir)
+}
+
 /// Rename a list of explicitly-named entries (the `rename`-like mode).
 ///
 /// Each path is renamed **itself** (not its contents). Missing paths are
@@ -711,6 +737,7 @@ fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) 
     let mut ops = Vec::new();
     let mut seen = HashSet::new();
     for path in paths {
+        let path = &*without_trailing_dot(path);
         // A single `stat` per argument: it detects a missing path and feeds
         // both the planning and the `Excluded` diagnosis below.
         let meta = match path.metadata() {
@@ -720,6 +747,11 @@ fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) 
                 continue;
             }
         };
+        // `.`, `x/..` and `/` refer to a directory without naming it.
+        if path.file_name().is_none() {
+            reporter.error(path, "Cannot rename ., .. or /");
+            continue;
+        }
         // Overlapping globs, or `x` next to `./x`: an entry named several
         // times is handled once.
         if entry_key(path).is_some_and(|key| !seen.insert(key)) {
