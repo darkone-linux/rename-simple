@@ -687,6 +687,21 @@ fn has_utf8_name(path: &Path) -> bool {
     path.file_name().is_some_and(|n| n.to_str().is_some())
 }
 
+/// The error to report for an argument whose metadata cannot be read.
+/// `metadata` follows symlinks, so a link to nothing fails with "not found"
+/// although the link itself exists: say so, as "No such file" would send the
+/// user looking for a typo. Other failures (permission denied, symlink loop…)
+/// are reported as they are.
+fn unreadable_entry(path: &Path, e: &std::io::Error) -> String {
+    if e.kind() != std::io::ErrorKind::NotFound {
+        e.to_string()
+    } else if path.symlink_metadata().is_ok() {
+        "Broken symbolic link".to_owned()
+    } else {
+        "No such file or directory".to_owned()
+    }
+}
+
 /// Rename a list of explicitly-named entries (the `rename`-like mode).
 ///
 /// Each path is renamed **itself** (not its contents). Missing paths are
@@ -698,9 +713,12 @@ fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) 
     for path in paths {
         // A single `stat` per argument: it detects a missing path and feeds
         // both the planning and the `Excluded` diagnosis below.
-        let Ok(meta) = path.metadata() else {
-            reporter.error(path, "No such file or directory");
-            continue;
+        let meta = match path.metadata() {
+            Ok(meta) => meta,
+            Err(e) => {
+                reporter.error(path, &unreadable_entry(path, &e));
+                continue;
+            }
         };
         // Overlapping globs, or `x` next to `./x`: an entry named several
         // times is handled once.

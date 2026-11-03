@@ -75,6 +75,25 @@ fn test_dangling_symlink_is_left_alone() {
 }
 
 #[test]
+fn test_broken_symlink_argument_is_reported_as_such() {
+    // The link exists, only its target does not: "No such file" would send
+    // the user looking for a typo.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    std::os::unix::fs::symlink("does-not-exist", dir.join("Dangling Link.txt")).unwrap();
+
+    let output = cmd().arg(dir.join("Dangling Link.txt")).output().unwrap();
+
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[E]") && stderr.contains("Broken symbolic link"),
+        "expected a broken-link error, got: {stderr}"
+    );
+    assert!(!stderr.contains("No such file"), "got: {stderr}");
+}
+
+#[test]
 fn test_dangling_symlink_at_the_destination_takes_the_name() {
     // `my-file.txt` points to nothing, but the name is taken all the same: the
     // dry-run must not announce a rename, and the real run must report the
@@ -153,6 +172,35 @@ fn test_readonly_parent_yields_error_without_panic() {
     assert!(
         stderr.to_lowercase().contains("error"),
         "per-file failure must be reported on stderr, got: {stderr}"
+    );
+}
+
+#[test]
+fn test_unreadable_parent_reports_permission_denied() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let locked = temp_dir.path().join("Locked");
+    fs::create_dir(&locked).unwrap();
+    fs::write(locked.join("File A.txt"), "x").unwrap();
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+
+    // Root reads through mode 000: nothing to test then.
+    let bypassed = fs::symlink_metadata(locked.join("File A.txt")).is_ok();
+    let output = (!bypassed).then(|| cmd().arg(locked.join("File A.txt")).output().unwrap());
+
+    // Restore the mode before anything can panic, or tempfile cannot clean up.
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+    let Some(output) = output else {
+        eprintln!("skipping: mode 000 does not stop this user");
+        return;
+    };
+
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[E]") && stderr.contains("Permission denied"),
+        "expected a permission error, got: {stderr}"
     );
 }
 
