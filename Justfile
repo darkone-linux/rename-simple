@@ -7,6 +7,12 @@ version := `sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml`
 # Debian architecture of this machine, which is also the one `nix build .#static`
 # targets; without dpkg, map the kernel's name instead of assuming amd64.
 arch := `dpkg --print-architecture 2>/dev/null || case "$(uname -m)" in x86_64) echo amd64 ;; aarch64) echo arm64 ;; *) uname -m ;; esac`
+# Target directory of the build that `cargo package` and `cargo publish` run to
+# verify the crate. In the shared `target/`, that build of the packaged copy
+# takes over the binary's fingerprint, which then tracks the frozen copy under
+# `target/package/`: edits to `src/` stop rebuilding the binary, and the CLI
+# tests run an outdated one.
+verify_dir := "target/package-verify"
 
 # Justfile help
 _default:
@@ -177,7 +183,7 @@ release:
     if curl -sf -A "$ua" "https://crates.io/api/v1/crates/rename-simple/${v}" >/dev/null 2>&1; then
         echo "crates.io rename-simple ${v} already published — skipping."
     else
-        cargo publish
+        cargo publish --target-dir {{ verify_dir }}
         echo "crates.io rename-simple ${v} published."
     fi
 
@@ -190,12 +196,12 @@ package type="all": _check_is_clean
     set -euo pipefail
     case "{{ type }}" in
         all)
-            cargo package
+            cargo package --target-dir {{ verify_dir }}
             just _pkgs_deb
             just _pkgs_nix
             ;;
         cargo)
-            cargo package
+            cargo package --target-dir {{ verify_dir }}
             ;;
         bin)
             just _pkgs_bin
