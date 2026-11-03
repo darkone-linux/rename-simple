@@ -20,7 +20,8 @@ renames each file or directory given as argument to a lowercase ASCII slug.
 Like \fBrename\fR(1), it acts on the arguments themselves, never on the
 contents of a directory: select entries with shell globbing, such as
 \fI*.jpg\fR, or \fIdir/**/*.pdf\fR with \fBzsh\fR or \fBbash\fR
-\fIglobstar\fR. Without arguments, it prints its help.
+\fIglobstar\fR. An entry named several times, by overlapping globs or as
+\fIx\fR and \fI./x\fR, is handled once. Without arguments, it prints its help.
 .PP
 A file name starting with a hyphen that a glob passes on, such as \fI\-D\fR,
 would be read as an option: an option that is also the name of an existing

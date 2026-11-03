@@ -420,6 +420,26 @@ struct Rename {
     same_entry: bool,
 }
 
+/// The directory holding `path`: its parent, or `.` for a bare name.
+fn parent_dir(path: &Path) -> &Path {
+    match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    }
+}
+
+/// Where an entry lives, however its path is spelled: the parent directory
+/// canonicalized (symlinks, `.` and `..` resolved) joined with the entry's own
+/// name, left as is since the entry itself may be a symlink. `Report A.pdf`,
+/// `./Report A.pdf` and `sub/../Report A.pdf` share one key. `None` for a path
+/// without a name (`..`, `/`).
+fn entry_key(path: &Path) -> Option<PathBuf> {
+    let name = path.file_name()?;
+    let dir = parent_dir(path);
+    let dir = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    Some(dir.join(name))
+}
+
 /// The names stored in each directory, listed once, on first use. A lookup
 /// may fold case (`photo.jpg` finds `Photo.JPG`); a listing returns the names
 /// as stored.
@@ -433,10 +453,7 @@ impl Listings {
         let Some(name) = path.file_name() else {
             return Ok(true);
         };
-        let dir = match path.parent() {
-            Some(parent) if !parent.as_os_str().is_empty() => parent,
-            _ => Path::new("."),
-        };
+        let dir = parent_dir(path);
         if !self.0.contains_key(dir) {
             let names = std::fs::read_dir(dir)?
                 .map(|entry| entry.map(|e| e.file_name()))
@@ -455,17 +472,24 @@ impl Listings {
 /// duplicate of the source, in which case the source is deleted instead (see
 /// `resolve_existing`).
 fn filter_conflicts(ops: Vec<RenameOp>, config: &Config, reporter: &mut Reporter) -> Vec<Rename> {
+    // Destinations are told apart by location, not by spelling: `note-b.txt`
+    // and `./note-b.txt` are one name.
+    let dest_keys: Vec<PathBuf> = ops
+        .iter()
+        .map(|op| entry_key(&op.to).unwrap_or_else(|| op.to.clone()))
+        .collect();
     let mut dest_count: HashMap<&Path, usize> = HashMap::with_capacity(ops.len());
-    for op in &ops {
-        *dest_count.entry(op.to.as_path()).or_insert(0) += 1;
+    for key in &dest_keys {
+        *dest_count.entry(key.as_path()).or_insert(0) += 1;
     }
 
     // `Some(same_entry)` keeps the op, `None` drops it.
     let mut listings = Listings::default();
     let keep: Vec<Option<bool>> = ops
         .iter()
-        .map(|op| {
-            if dest_count[op.to.as_path()] > 1 {
+        .zip(&dest_keys)
+        .map(|(op, key)| {
+            if dest_count[key.as_path()] > 1 {
                 reporter.error(&op.from, "Multiple entries would produce this name");
                 None
             } else if taken(&op.to) {
@@ -670,6 +694,7 @@ fn has_utf8_name(path: &Path) -> bool {
 /// conflicts across the whole batch are detected together via `filter_conflicts`.
 fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) {
     let mut ops = Vec::new();
+    let mut seen = HashSet::new();
     for path in paths {
         // A single `stat` per argument: it detects a missing path and feeds
         // both the planning and the `Excluded` diagnosis below.
@@ -677,6 +702,11 @@ fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) 
             reporter.error(path, "No such file or directory");
             continue;
         };
+        // Overlapping globs, or `x` next to `./x`: an entry named several
+        // times is handled once.
+        if entry_key(path).is_some_and(|key| !seen.insert(key)) {
+            continue;
+        }
         match plan_entry_with_metadata(path, &meta, config.target, config.cleanup) {
             RenamePlan::Rename(op) => ops.push(op),
             RenamePlan::AlreadyClean => reporter.skipped(path),

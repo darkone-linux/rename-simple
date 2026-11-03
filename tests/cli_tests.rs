@@ -1237,3 +1237,71 @@ fn test_dot_slash_glob_never_reads_names_as_options() {
     assert!(dir.join("d").exists());
     assert!(dir.join("IMG 1.mov").exists(), "nothing may be deleted");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// One path, several spellings (overlapping globs, `./`, `..`)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_entry_given_several_times_is_renamed_once() {
+    // Overlapping globs (`*.pdf Report*`) hand over the same entry twice.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::create_dir(dir.join("sub")).unwrap();
+    fs::write(dir.join("Report A.pdf"), "x").unwrap();
+
+    let output = cmd()
+        .current_dir(dir)
+        .args([
+            "Report A.pdf",
+            "Report A.pdf",
+            "./Report A.pdf",
+            "sub/../Report A.pdf",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.is_empty(), "no error expected, got: {stderr}");
+    assert!(dir.join("report-a.pdf").exists());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("1 entry matched, 1 entry renamed, 0 error."),
+        "got: {stdout}"
+    );
+}
+
+#[test]
+fn test_two_spellings_of_one_destination_conflict() {
+    // Two entries that both clean up to `note-b.txt`, handed over through
+    // paths spelled differently: still a conflict, in the dry-run too.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("Note B.txt"), "one").unwrap();
+    fs::write(dir.join("Note  B.txt"), "two").unwrap();
+
+    for flags in [&["-n"][..], &[]] {
+        let output = cmd()
+            .current_dir(dir)
+            .args(flags)
+            .args(["Note B.txt", "./Note  B.txt"])
+            .output()
+            .unwrap();
+
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!stdout.contains("[R]"), "{flags:?}: no rename: {stdout}");
+        assert_eq!(
+            stderr
+                .matches("Multiple entries would produce this name")
+                .count(),
+            2,
+            "{flags:?}: both entries are in conflict: {stderr}"
+        );
+    }
+    assert_eq!(fs::read_to_string(dir.join("Note B.txt")).unwrap(), "one");
+    assert_eq!(fs::read_to_string(dir.join("Note  B.txt")).unwrap(), "two");
+    assert!(!dir.join("note-b.txt").exists());
+}

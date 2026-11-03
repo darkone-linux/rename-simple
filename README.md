@@ -59,9 +59,10 @@ rename-simple [OPTIONS] [files]...
 
 Each argument is renamed itself, like with `rename`(1). Globbing is left to the
 shell: `rename-simple *.jpg`, or `rename-simple dir/**/*.pdf` with zsh or bash
-`globstar`. Files and directories are both renamed by default; `-f` / `-d`
-restrict renaming to one type. Without arguments, `rename-simple` prints its
-help.
+`globstar`. An entry named several times, by overlapping globs or as `x` and
+`./x`, is handled once. Files and directories are both renamed by default;
+`-f` / `-d` restrict renaming to one type. Without arguments, `rename-simple`
+prints its help.
 
 A file name starting with `-` that a glob passes on, such as `-D`, would be
 read as an option: an option that is also the name of an existing entry makes
