@@ -1305,3 +1305,26 @@ fn test_two_spellings_of_one_destination_conflict() {
     assert_eq!(fs::read_to_string(dir.join("Note  B.txt")).unwrap(), "two");
     assert!(!dir.join("note-b.txt").exists());
 }
+
+#[test]
+fn test_child_is_renamed_before_its_parent_however_spelled() {
+    // The absolute path of the parent has more components than the relative
+    // path of its child: renaming the parent first would leave the child's
+    // path dangling.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::create_dir(dir.join("My Dir")).unwrap();
+    fs::write(dir.join("My Dir").join("File A"), "x").unwrap();
+
+    let output = cmd()
+        .current_dir(dir)
+        .arg(dir.join("My Dir"))
+        .arg("My Dir/File A")
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.is_empty(), "no error expected, got: {stderr}");
+    assert!(dir.join("my-dir").join("file-a").exists());
+}
