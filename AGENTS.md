@@ -95,8 +95,10 @@ Options:
 
 Each argument is renamed itself (`rename`(1)-like); without `-f`/`-d` both files
 and directories are renamed. With no argument, the program prints its help.
-Exit status: `0` if the command line is valid (per-entry errors do not change
-it); `2` if it is invalid (clap usage error: unknown option, `-f` with `-d`…).
+Exit status: `0` if every entry is handled; `1` if at least one `[E]` line is
+reported (also under `-n` and `-q`; the other entries are still processed);
+`2` if the command line is invalid (clap usage error: unknown option, `-f`
+with `-d`…).
 Default output: `[R]` lines (stdout), `[W]` / `[E]` lines (stderr), then a
 summary. `-v` adds `[X]` lines for unchanged entries; `-q` prints nothing.
 

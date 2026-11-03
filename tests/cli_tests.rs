@@ -134,7 +134,7 @@ fn test_conflict_warning() {
         .output()
         .unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let combined = format!("{stdout}{stderr}");
@@ -151,7 +151,7 @@ fn test_existing_destination_skipped() {
 
     let output = cmd().arg("-n").arg(dir.join("café.txt")).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let combined = format!("{stdout}{stderr}");
@@ -255,7 +255,7 @@ fn test_quiet_mode_stays_silent_on_conflicts() {
         .output()
         .unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(output.stdout.is_empty() && output.stderr.is_empty());
 }
 
@@ -293,7 +293,7 @@ fn test_normal_mode_reports_conflicts_on_stderr() {
         .output()
         .unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("[E]"),
@@ -394,11 +394,11 @@ fn test_quiet_conflicts_with_verbose() {
 
 #[test]
 fn test_nonexistent_path_reports_error() {
-    // A non-existent explicit target is a per-entry error: reported on stderr
-    // but, like any per-entry failure, it does not change the exit status.
+    // A non-existent explicit target is a per-entry error: reported on stderr,
+    // and like any per-entry failure it sets the exit status to 1.
     let output = cmd().arg("/this/path/does/not/exist/xyz").output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("[E]"),
@@ -557,7 +557,7 @@ fn test_existing_destination_keeps_source_intact() {
 
     let output = cmd().arg(dir.join("café.txt")).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(dir.join("café.txt").exists(), "source must not be deleted");
     assert_eq!(fs::read_to_string(dir.join("café.txt")).unwrap(), "source");
     assert_eq!(
@@ -584,7 +584,7 @@ fn test_unnamed_collision_two_sources_skipped() {
         .output()
         .unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(dir.join("!!!.txt").exists(), "first source must stay");
     assert!(dir.join("***.txt").exists(), "second source must stay");
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -604,7 +604,7 @@ fn test_unnamed_collides_with_existing_destination() {
 
     let output = cmd().arg(dir.join("!!!.txt")).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(dir.join("!!!.txt").exists(), "source must stay put");
     assert_eq!(
         fs::read_to_string(dir.join("unnamed.txt")).unwrap(),
@@ -631,7 +631,7 @@ fn test_existing_destination_preserved_under_dry_run_too() {
 
     let output = cmd().arg("-n").arg(dir.join("Café.txt")).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(dir.join("Café.txt").exists());
     assert_eq!(fs::read_to_string(dir.join("Café.txt")).unwrap(), "source");
     assert_eq!(
@@ -656,7 +656,7 @@ fn test_three_way_conflict_all_skipped() {
         .output()
         .unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     // None of the three should have been collapsed into a single cafe.txt
     assert!(dir.join("Café.txt").exists());
     assert!(dir.join("café.txt").exists());
@@ -763,7 +763,7 @@ fn test_conflicting_explicit_arguments_are_skipped() {
         .output()
         .unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(dir.join("Café.txt").exists());
     assert!(dir.join("café.txt").exists());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -967,7 +967,7 @@ fn test_same_size_different_content_is_an_error() {
 
     let output = cmd().arg("-D").arg(dir.join("Café.txt")).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(dir.join("Café.txt").exists(), "source must stay put");
     assert_eq!(fs::read_to_string(dir.join("cafe.txt")).unwrap(), "bbbb");
 
@@ -1033,7 +1033,7 @@ fn test_directory_destination_is_never_deleted() {
         .output()
         .unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(dir.join("Mon Dossier").exists(), "source dir must stay");
     assert!(dir.join("mon-dossier").exists(), "target dir must stay");
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1055,7 +1055,7 @@ fn test_duplicate_needs_the_flag_to_be_deleted() {
 
     let output = cmd().arg(dir.join("Café.txt")).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(
         dir.join("Café.txt").exists(),
         "no deletion without an explicit -D"
@@ -1089,7 +1089,7 @@ fn test_fix_all_does_not_delete_duplicates() {
 
     let output = cmd().arg("-A").arg(dir.join("CafÃ©.txt")).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(
         dir.join("CafÃ©.txt").exists(),
         "-A must not delete anything"
@@ -1193,7 +1193,7 @@ fn test_option_named_file_after_separator_is_a_file() {
         .output()
         .unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(dir.join("d").exists(), "`-D` is renamed like any file");
     assert!(
         dir.join("IMG 1.mov").exists(),
@@ -1233,7 +1233,7 @@ fn test_dot_slash_glob_never_reads_names_as_options() {
         .output()
         .unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(dir.join("d").exists());
     assert!(dir.join("IMG 1.mov").exists(), "nothing may be deleted");
 }
@@ -1289,7 +1289,7 @@ fn test_two_spellings_of_one_destination_conflict() {
             .output()
             .unwrap();
 
-        assert!(output.status.success());
+        assert_eq!(output.status.code(), Some(1));
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!stdout.contains("[R]"), "{flags:?}: no rename: {stdout}");
@@ -1327,4 +1327,68 @@ fn test_child_is_renamed_before_its_parent_however_spelled() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.is_empty(), "no error expected, got: {stderr}");
     assert!(dir.join("my-dir").join("file-a").exists());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Exit status: 0 every entry handled, 1 an entry failed, 2 invalid command line
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_exit_status_is_0_when_every_entry_is_handled() {
+    // Renamed, already clean, duplicate removed: nothing failed.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("Mon Fichier.txt"), "a").unwrap();
+    fs::write(dir.join("clean.txt"), "b").unwrap();
+    fs::write(dir.join("Café.txt"), "same bytes").unwrap();
+    fs::write(dir.join("cafe.txt"), "same bytes").unwrap();
+
+    let output = cmd()
+        .arg("-D")
+        .arg(dir.join("Mon Fichier.txt"))
+        .arg(dir.join("clean.txt"))
+        .arg(dir.join("Café.txt"))
+        .output()
+        .unwrap();
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn test_exit_status_is_1_when_an_entry_fails() {
+    // Also in a dry-run, which predicts the real run, and under -q, which
+    // leaves the status as the only signal. The other entries are processed
+    // all the same.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("Mon Fichier.txt"), "a").unwrap();
+
+    for flags in [&["-n"][..], &["-q"], &[]] {
+        let output = cmd()
+            .args(flags)
+            .arg(dir.join("Missing File.txt"))
+            .arg(dir.join("Mon Fichier.txt"))
+            .output()
+            .unwrap();
+
+        assert_eq!(output.status.code(), Some(1), "{flags:?}");
+    }
+    assert!(dir.join("mon-fichier.txt").exists());
+}
+
+#[test]
+fn test_exit_status_is_1_on_a_conflict() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("Café.txt"), "one").unwrap();
+    fs::write(dir.join("cafe.txt"), "two").unwrap();
+
+    let output = cmd().arg(dir.join("Café.txt")).output().unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
 }

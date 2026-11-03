@@ -68,7 +68,7 @@ fn test_dangling_symlink_is_left_alone() {
         .output()
         .unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(dir.join("real-file.txt").exists());
     // Dangling symlink stays put under its original name
     assert!(fs::symlink_metadata(dir.join("Dangling Link.txt")).is_ok());
@@ -84,7 +84,7 @@ fn test_broken_symlink_argument_is_reported_as_such() {
 
     let output = cmd().arg(dir.join("Dangling Link.txt")).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("[E]") && stderr.contains("Broken symbolic link"),
@@ -110,7 +110,7 @@ fn test_dangling_symlink_at_the_destination_takes_the_name() {
             .output()
             .unwrap();
 
-        assert!(output.status.success());
+        assert_eq!(output.status.code(), Some(1));
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!stdout.contains("[R]"), "{args:?}: no rename: {stdout}");
@@ -164,9 +164,10 @@ fn test_readonly_parent_yields_error_without_panic() {
     restore.set_mode(0o755);
     fs::set_permissions(dir, restore).unwrap();
 
-    assert!(
-        output.status.success(),
-        "exit must stay 0 on per-file errors"
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "a per-file error exits with 1, not a panic"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -196,7 +197,7 @@ fn test_unreadable_parent_reports_permission_denied() {
         return;
     };
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("[E]") && stderr.contains("Permission denied"),
@@ -228,7 +229,11 @@ fn test_invalid_utf8_filename_does_not_panic() {
         .output()
         .unwrap();
 
-    assert!(output.status.success(), "must not crash on invalid UTF-8");
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "an error for the invalid name, not a crash"
+    );
     assert!(
         bad_path.exists(),
         "invalid-UTF-8 filename must be skipped, not renamed or deleted"
@@ -255,7 +260,7 @@ fn test_hard_link_to_destination_is_not_deleted() {
 
     let output = cmd().arg("-D").arg(dir.join("Café.txt")).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(dir.join("Café.txt").exists(), "hard link must stay");
     assert!(dir.join("cafe.txt").exists(), "destination must stay");
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -280,7 +285,7 @@ fn test_hard_link_spelled_in_another_case_is_not_renamed() {
 
     let output = cmd().arg(dir.join("REPORT.txt")).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(dir.join("REPORT.txt").exists(), "hard link must stay");
     assert!(dir.join("report.txt").exists(), "destination must stay");
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -302,7 +307,7 @@ fn test_symlink_duplicate_of_its_own_target_is_not_deleted() {
 
     let output = cmd().arg("-D").arg(dir.join("Café.txt")).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(dir.join("Café.txt").exists(), "symlink must stay");
     assert_eq!(fs::read_to_string(dir.join("cafe.txt")).unwrap(), "shared");
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -327,7 +332,7 @@ fn test_symlink_source_is_never_deleted_as_duplicate() {
 
     let output = cmd().arg("-D").arg(dir.join("Café.txt")).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(
         dir.join("Café.txt").symlink_metadata().is_ok(),
         "the symlink must survive"
@@ -355,7 +360,7 @@ fn test_symlinked_destination_never_deletes_the_source() {
 
     let output = cmd().arg("-D").arg(dir.join("Café.txt")).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(
         dir.join("Café.txt").exists(),
         "the only real copy must survive"
@@ -405,7 +410,7 @@ fn test_duplicate_with_other_permissions_is_not_deleted() {
             .output()
             .unwrap();
 
-        assert!(output.status.success());
+        assert_eq!(output.status.code(), Some(1));
         assert!(
             dir.join("Secret Notes.txt").exists(),
             "{flags}: the private source must stay"
@@ -430,7 +435,7 @@ fn test_duplicate_with_other_permissions_does_not_suggest_d() {
 
     let output = cmd().arg(dir.join("Secret Notes.txt")).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("[E]") && !stderr.contains("-D"),
@@ -478,7 +483,7 @@ fn test_duplicate_with_other_group_is_not_deleted() {
         .output()
         .unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(dir.join("Group Notes.txt").exists(), "the source must stay");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -505,7 +510,7 @@ fn test_invalid_utf8_name_is_reported() {
 
     let output = cmd().arg(&bad_path).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("[E]") && stderr.contains("UTF-8"),
@@ -629,7 +634,7 @@ fn test_control_characters_in_an_error_line_are_printed_escaped() {
 
     let output = cmd().arg(&bad_path).output().unwrap();
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert_no_raw_controls(&stderr);
     assert!(
@@ -723,7 +728,7 @@ fn test_closed_stderr_does_not_stop_the_renames() {
         .output()
         .unwrap();
 
-    assert!(output.status.success(), "{:?}", output.status);
+    assert_eq!(output.status.code(), Some(1), "the missing entry fails");
     assert_all_renamed(temp_dir.path());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(

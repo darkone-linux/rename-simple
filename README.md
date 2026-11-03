@@ -79,7 +79,7 @@ the command line invalid. Put `--` before the file names
 | `-A`, `--fix-all` | Apply every cleanup fix: `-U` and `-H` |
 | `-D`, `--delete-duplicates` | Delete a source that is a byte-for-byte duplicate of an existing target |
 | `-n`, `--dry-run` | Show what would be done without renaming or deleting anything |
-| `-q`, `--quiet` | Print nothing, not even errors |
+| `-q`, `--quiet` | Print nothing, not even errors (the exit status still reports them) |
 | `-v`, `--verbose` | Also list unchanged entries (`[X]`) |
 | `-h`, `--help` | Print help |
 | `-V`, `--version` | Print version |
@@ -90,9 +90,13 @@ line. Control and bidirectional formatting characters in names are printed
 escaped (`\n`, `\u{1b}`, `\u{202e}`): a name cannot drive the terminal or add a
 line to the report. Output that cannot be written, for example once the reader
 of a pipe has exited (`| head`), is dropped and every entry is still
-processed. The exit status is `0` when the command line is valid, even if some
-entries fail, and `2` when it is invalid (unknown option, `-f` with `-d`,
-option that is also the name of an existing entry…).
+processed.
+
+The exit status is `0` when every entry is handled, and `1` when at least one
+fails (an `[E]` line, with `-n` and `-q` too): the other entries are processed
+all the same. It is `2` when the command line is invalid (unknown option, `-f`
+with `-d`, option that is also the name of an existing entry…), and nothing is
+renamed then.
 
 ## Examples
 

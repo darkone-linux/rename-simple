@@ -10,7 +10,7 @@ use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
-use std::process;
+use std::process::{self, ExitCode};
 
 /// Lossy display name for a path, escaped by `terminal_safe`, with a stable
 /// fallback when `file_name()` is `None` (e.g. a path ending in `..`). Avoids
@@ -759,7 +759,10 @@ fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) 
 // main
 // ─────────────────────────────────────────────────────────────────────────────
 
-fn main() {
+/// Exit status: `0` when every entry was handled, `1` when at least one was
+/// reported as an error (`[E]`), `2` for an invalid command line (clap's own
+/// usage errors, and an option that names an existing entry).
+fn main() -> ExitCode {
     // `Cli::parse_from` exits the process on parse errors and on `--help` /
     // `--version`, so anything reaching the next check already has a
     // syntactically valid command line.
@@ -784,7 +787,7 @@ fn main() {
     // Without explicit paths there is nothing to operate on: show help like -h.
     if cli.paths.is_empty() {
         Cli::command().print_help().unwrap_or(());
-        process::exit(0);
+        return ExitCode::SUCCESS;
     }
 
     let config = Config {
@@ -797,4 +800,12 @@ fn main() {
     let mut reporter = Reporter::new(verbosity_from(&cli));
     process_targets(&cli.paths, &config, &mut reporter);
     reporter.report();
+    // As with `mv` or `cp`: one failed entry fails the command, in a dry-run
+    // too (it predicts the real run) and under `-q` (the status is all that
+    // is left then). The other entries have been processed all the same.
+    if reporter.errors > 0 {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
 }

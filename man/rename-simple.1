@@ -112,7 +112,7 @@ Show what would be done without renaming or deleting anything.
 Also list unchanged entries, as \fB[X]\fR lines.
 .TP
 \fB\-q\fR, \fB\-\-quiet\fR
-Print nothing, not even errors.
+Print nothing, not even errors; the exit status still reports them.
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help and exit.
@@ -122,8 +122,12 @@ Print the version and exit.
 .SH EXIT STATUS
 .TP
 .B 0
-The command line is valid. Errors on individual entries (missing entry,
-conflict, I/O error) do not change the exit status.
+Every entry was handled: renamed, already clean, or deleted as a duplicate
+with \fB\-D\fR.
+.TP
+.B 1
+At least one entry failed (missing entry, conflict, I/O error...), or would
+fail with \fB\-n\fR. The other entries are processed all the same.
 .TP
 .B 2
 The command line is invalid, for example an unknown option, \fB\-f\fR
