@@ -607,23 +607,29 @@ fn same_access(a: &Path, b: &Path) -> std::io::Result<bool> {
 /// Closes the TOCTOU window between the `taken` pre-check in
 /// `filter_conflicts` and the actual rename:
 ///
-/// - **Linux**: `renameat2(AT_FDCWD, from, AT_FDCWD, to, RENAME_NOREPLACE)`
+/// - **Linux, macOS**: `renameat2(AT_FDCWD, from, AT_FDCWD, to,
+///   RENAME_NOREPLACE)` on Linux, `renameatx_np(…, RENAME_EXCL)` on macOS,
 ///   via `rustix` — atomic at the syscall level. A filesystem that does not
 ///   support the flag (NFS, FUSE without `rename2`: sshfs, ntfs-3g) or a
-///   kernel without `renameat2` rejects the call itself, with `EINVAL`,
-///   `ENOSYS` or `EOPNOTSUPP`: `check_then_rename` takes over, as in `mv -n`.
-/// - **Other Unix / Windows**: `check_then_rename`.
+///   system without the call rejects the call itself, with `EINVAL`,
+///   `ENOSYS`, `EOPNOTSUPP` or `ENOTSUP`: `check_then_rename` takes over, as
+///   in `mv -n`.
+/// - **Elsewhere (Windows)**: `check_then_rename`.
 fn rename_no_clobber(from: &Path, to: &Path) -> std::io::Result<()> {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_vendor = "apple"))]
     {
         use rustix::fs::{renameat_with, RenameFlags, CWD};
         use rustix::io::Errno;
+        // A list, not a pattern: `NOTSUP` and `OPNOTSUPP` are one value on
+        // Linux, two on macOS.
+        const FLAG_REFUSED: [Errno; 4] =
+            [Errno::INVAL, Errno::NOSYS, Errno::OPNOTSUPP, Errno::NOTSUP];
         match renameat_with(CWD, from, CWD, to, RenameFlags::NOREPLACE) {
-            Err(Errno::INVAL | Errno::NOSYS | Errno::OPNOTSUPP) => check_then_rename(from, to),
+            Err(e) if FLAG_REFUSED.contains(&e) => check_then_rename(from, to),
             result => result.map_err(std::io::Error::from),
         }
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_vendor = "apple")))]
     {
         check_then_rename(from, to)
     }
