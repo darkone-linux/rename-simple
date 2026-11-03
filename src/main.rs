@@ -276,6 +276,8 @@ impl Stream {
 /// level and disabling colours when the streams are not terminals.
 struct Reporter {
     verbosity: Verbosity,
+    /// `-n`: the summary tells what would happen, nothing has changed.
+    dry_run: bool,
     stdout: Stream,
     stderr: Stream,
     renamed: usize,
@@ -285,9 +287,10 @@ struct Reporter {
 }
 
 impl Reporter {
-    fn new(verbosity: Verbosity) -> Self {
+    fn new(verbosity: Verbosity, dry_run: bool) -> Self {
         Self {
             verbosity,
+            dry_run,
             stdout: Stream::new(std::io::stdout().is_terminal()),
             stderr: Stream::new(std::io::stderr().is_terminal()),
             renamed: 0,
@@ -373,11 +376,17 @@ impl Reporter {
         let matched_word = plural(matched, "entry", "entries");
         let renamed_word = plural(self.renamed, "entry", "entries");
         let errors_word = plural(self.errors, "error", "errors");
+        // A dry-run changes nothing: its summary must not claim otherwise.
+        let (renamed_verb, removed_verb) = if self.dry_run {
+            ("would be renamed", "would be deleted")
+        } else {
+            ("renamed", "removed")
+        };
         // The duplicate segment only shows up when there is something to say,
         // keeping the usual summary as short as it has always been.
         let duplicates = if self.duplicates > 0 {
             format!(
-                ", {} {} removed",
+                ", {} {} {removed_verb}",
                 self.duplicates,
                 plural(self.duplicates, "duplicate", "duplicates")
             )
@@ -387,7 +396,7 @@ impl Reporter {
         self.stdout.write_line(
             std::io::stdout().lock(),
             format_args!(
-                "{matched} {matched_word} matched, {} {renamed_word} renamed{duplicates}, {} {errors_word}.",
+                "{matched} {matched_word} matched, {} {renamed_word} {renamed_verb}{duplicates}, {} {errors_word}.",
                 self.renamed, self.errors
             ),
         );
@@ -817,7 +826,7 @@ fn main() -> ExitCode {
         cleanup: cleanup_from(&cli),
     };
 
-    let mut reporter = Reporter::new(verbosity_from(&cli));
+    let mut reporter = Reporter::new(verbosity_from(&cli), config.dry_run);
     process_targets(&cli.paths, &config, &mut reporter);
     reporter.report();
     // As with `mv` or `cp`: one failed entry fails the command, in a dry-run

@@ -1000,6 +1000,36 @@ fn test_duplicate_dry_run_keeps_source() {
 }
 
 #[test]
+fn test_dry_run_summary_speaks_in_the_conditional() {
+    // -n changes nothing: the summary must not claim that entries were
+    // renamed or duplicates deleted.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("Café.txt"), "same bytes").unwrap();
+    fs::write(dir.join("cafe.txt"), "same bytes").unwrap();
+    fs::write(dir.join("Mon Fichier.txt"), "content").unwrap();
+
+    let output = cmd()
+        .arg("-nD")
+        .arg(dir.join("Café.txt"))
+        .arg(dir.join("Mon Fichier.txt"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("Café.txt").exists());
+    assert!(dir.join("Mon Fichier.txt").exists());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(
+            "2 entries matched, 1 entry would be renamed, 1 duplicate would be deleted, 0 error."
+        ),
+        "got: {stdout}"
+    );
+}
+
+#[test]
 fn test_duplicate_stays_silent_under_quiet() {
     let temp_dir = tempfile::tempdir().unwrap();
     let dir = temp_dir.path();

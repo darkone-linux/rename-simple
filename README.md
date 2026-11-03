@@ -129,7 +129,7 @@ $ rename-simple -n *
 [R] .: Café Montréal.jpg -> cafe-montreal.jpg
 [R] .: notes.cuicuicuicui -> notes-cuicuicuicui
 [R] .: Réunion d'équipe (2024).docx -> reunion-d-equipe-2024.docx
-6 entries matched, 6 entries renamed, 0 error.
+6 entries matched, 6 entries would be renamed, 0 error.
 ```
 
 Run the same command without `-n` to apply the renames.
