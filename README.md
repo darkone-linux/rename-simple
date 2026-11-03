@@ -152,8 +152,10 @@ is never altered; double mojibake (`CafÃƒÂ©`) is repaired too. `-H` decodes
 named (`&eacute;`), decimal (`&#233;`) and hexadecimal (`&#xE9;`) entities.
 Block tags (`<br>`, `<p>`, `<div>`, `<li>`, `<h1>` to `<h6>`…) become a space
 (`data<br>client` → `data-client`); inline tags (`<b>`, `<i>`, `<span>`…) are
-removed (`client<b>s` → `clients`). A decoded slash is converted like any other
-character (`Report &#47; Final.txt` → `report-final.txt`).
+removed (`client<b>s` → `clients`). Text between `<` and `>` is a tag only if
+each of its attributes takes a value (`<a href="x.html">`), so
+`if a<b and c>d.txt` → `if-a-b-and-c-d.txt`. A decoded slash is converted like
+any other character (`Report &#47; Final.txt` → `report-final.txt`).
 
 ### Conflicts and duplicates
 

@@ -1251,6 +1251,26 @@ mod fix_html_tests {
     }
 
     #[test]
+    fn angle_brackets_around_prose_are_kept() {
+        // `<b and c>` would be a tag with two bare attributes, but in a file
+        // name it is prose: an attribute needs a value to count.
+        assert_eq!(fix_html("if a<b and c>d"), "if a<b and c>d");
+        assert_eq!(fix_html("x<y or z>w"), "x<y or z>w");
+        // A closing tag takes no attribute at all.
+        assert_eq!(fix_html("a</b c>d"), "a</b c>d");
+    }
+
+    #[test]
+    fn tag_spellings_are_all_stripped() {
+        assert_eq!(fix_html("a<br />b"), "a b");
+        assert_eq!(fix_html("<b >x</b >"), "x");
+        assert_eq!(fix_html("<a href=index.html>Link</a>"), "Link");
+        assert_eq!(fix_html("<span class=\"x\" id='y'>t</span>"), "t");
+        // A quoted `>` does not end the tag.
+        assert_eq!(fix_html("<img alt=\"a > b\">legend"), "legend");
+    }
+
+    #[test]
     fn core_entities_are_decoded() {
         assert_eq!(fix_html("Tom &amp; Jerry"), "Tom & Jerry");
         assert_eq!(fix_html("1 &lt; 2 &gt; 0"), "1 < 2 > 0");

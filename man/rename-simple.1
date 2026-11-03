@@ -89,7 +89,9 @@ Before renaming, strip HTML tags and decode HTML entities.
 \fI<b>Tom &amp; Jerry.mp4\fR becomes \fItom\-jerry.mp4\fR. Block tags
 (\fI<br>\fR, \fI<p>\fR, \fI<div>\fR, \fI<li>\fR, \fI<h1>\fR to \fI<h6>\fR...)
 become a space; inline tags (\fI<b>\fR, \fI<i>\fR, \fI<span>\fR...) are
-removed. Named (\fI&eacute;\fR), decimal (\fI&#233;\fR) and hexadecimal
+removed. Text between \fI<\fR and \fI>\fR is a tag only if each of its
+attributes takes a value (\fI<a href="x.html">\fR):
+\fIif a<b and c>d.txt\fR becomes \fIif\-a\-b\-and\-c\-d.txt\fR. Named (\fI&eacute;\fR), decimal (\fI&#233;\fR) and hexadecimal
 (\fI&#xE9;\fR) entities are decoded; any other text is kept. A decoded slash
 (\fI&#47;\fR) is converted like any other character:
 \fIReport &#47; Final.txt\fR becomes \fIreport\-final.txt\fR.

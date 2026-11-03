@@ -383,9 +383,12 @@ fn is_separator_tag(content: &str) -> bool {
         .any(|&tag| tag.eq_ignore_ascii_case(name))
 }
 
-/// Remove HTML/XML tags: a `<` immediately followed by an ASCII letter, `/`
-/// or `!` opens a tag that ends at the next `>`. Anything else (`a < b`, an
-/// unclosed `<tag`) is kept verbatim and left to the slug pipeline.
+/// Remove HTML/XML tags. A tag is `<name>`, `<name/>`, `<name attr=value…>`
+/// (the value quoted or not; a quoted `>` does not end the tag), `</name>`, or
+/// a comment or declaration (`<!-- … -->`, `<!DOCTYPE html>`). Anything else
+/// is kept verbatim and left to the slug pipeline: `a < b`, an unclosed
+/// `<tag`, and prose such as `a<b and c>d`, whose bare words would only be
+/// attributes without a value.
 ///
 /// Block-level tags (`<br>`, `<p>`, `<h1>`…) are replaced by a space so the
 /// words around them stay separate; inline tags (`<b>`, `<i>`…) vanish with no
@@ -399,24 +402,83 @@ fn strip_tags(s: &str) -> String {
     while let Some(pos) = rest.find('<') {
         out.push_str(&rest[..pos]);
         let after = &rest[pos..];
-        let opens_tag = matches!(
-            after[1..].chars().next(),
-            Some(c) if c.is_ascii_alphabetic() || c == '/' || c == '!'
-        );
-        if opens_tag {
-            if let Some(end) = after.find('>') {
-                if is_separator_tag(&after[1..end]) {
-                    out.push(' ');
-                }
-                rest = &after[end + 1..];
-                continue;
+        if let Some((len, separator)) = tag_at(after) {
+            if separator {
+                out.push(' ');
             }
+            rest = &after[len..];
+        } else {
+            out.push('<');
+            rest = &after[1..];
         }
-        out.push('<');
-        rest = &after[1..];
     }
     out.push_str(rest);
     out
+}
+
+/// The tag at the start of `s`, which starts with `<`: its length in bytes,
+/// and whether it is a block-level tag. `None` when `s` does not start with a
+/// tag as [`strip_tags`] defines it.
+fn tag_at(s: &str) -> Option<(usize, bool)> {
+    let bytes = s.as_bytes();
+    if bytes.get(1) == Some(&b'!') {
+        return s.find('>').map(|end| (end + 1, false));
+    }
+    let closing = bytes.get(1) == Some(&b'/');
+    let name_start = if closing { 2 } else { 1 };
+    if !bytes.get(name_start).is_some_and(u8::is_ascii_alphabetic) {
+        return None;
+    }
+    let mut i = name_start;
+    while bytes.get(i).is_some_and(u8::is_ascii_alphanumeric) {
+        i += 1;
+    }
+    let separator = is_separator_tag(&s[name_start..i]);
+    loop {
+        let spaced = bytes.get(i).is_some_and(u8::is_ascii_whitespace);
+        while bytes.get(i).is_some_and(u8::is_ascii_whitespace) {
+            i += 1;
+        }
+        match *bytes.get(i)? {
+            b'>' => return Some((i + 1, separator)),
+            b'/' if !closing && bytes.get(i + 1) == Some(&b'>') => {
+                return Some((i + 2, separator));
+            }
+            // Attributes: in an opening tag only, each after a space.
+            _ if !closing && spaced => i = attribute_end(s, i)?,
+            _ => return None,
+        }
+    }
+}
+
+/// The end of the `name=value` attribute starting at byte `start` of `s`, the
+/// value quoted with `"` or `'`, or unquoted. `None` for anything else, a
+/// bare name included.
+fn attribute_end(s: &str, start: usize) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut i = start;
+    while bytes
+        .get(i)
+        .is_some_and(|&b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b':' | b'.'))
+    {
+        i += 1;
+    }
+    if i == start || bytes.get(i) != Some(&b'=') {
+        return None;
+    }
+    i += 1;
+    if let quote @ (b'"' | b'\'') = *bytes.get(i)? {
+        let len = s[i + 1..].find(char::from(quote))?;
+        Some(i + 1 + len + 1)
+    } else {
+        let value_start = i;
+        while bytes.get(i).is_some_and(|&b| {
+            !b.is_ascii_whitespace() && !matches!(b, b'"' | b'\'' | b'<' | b'=' | b'>' | b'`')
+        }) {
+            i += 1;
+        }
+        (i > value_start).then_some(i)
+    }
 }
 
 /// Decode a named HTML entity body (the part between `&` and `;`).
