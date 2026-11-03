@@ -6,15 +6,22 @@ on:
   pull_request:
     branches: [main, develop]
 
+# Read-only token: nothing here writes to the repository, whatever the
+# repository default says. Third-party actions are pinned by commit SHA, the
+# tag or branch in the trailing comment: a moved tag cannot run new code here.
+# Update the SHA and the comment together.
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Quality gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v23
+        uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
         with:
           # v21 flipped this default to `true`, which swaps upstream Nix for
           # Determinate Nix (separate EULA) and logs in to FlakeHub. Nothing
@@ -31,7 +38,7 @@ jobs:
     name: MSRV
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Read the floor straight from Cargo.toml so this job can never disagree
       # with the declared value.
@@ -40,7 +47,7 @@ jobs:
         run: |
           echo "version=$(grep -m1 '^rust-version' Cargo.toml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
 
@@ -53,9 +60,9 @@ jobs:
     name: Windows
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: stable
 
@@ -71,10 +78,10 @@ jobs:
     name: Nix flake
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v23
+        uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
         with:
           # Same reason as the quality gate job: stay on upstream Nix.
           determinate: false
