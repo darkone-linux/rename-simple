@@ -95,6 +95,10 @@ bump level="patch":
     esac
     new="${major}.${minor}.${patch}"
     sed -i "s/^version = \"${current}\"/version = \"${new}\"/" Cargo.toml
+    # The man page header carries the version and the date of the last change.
+    sed -i "s/^\(\.TH RENAME-SIMPLE 1\) \"[^\"]*\" \"rename-simple [^\"]*\"/\1 \"$(date +%F)\" \"rename-simple ${new}\"/" man/rename-simple.1
+    grep -q "\"rename-simple ${new}\"" man/rename-simple.1 \
+        || { echo "Error: man page header not updated" >&2; exit 1; }
     cargo check -q
     echo "Version bumped: ${current} → ${new}"
     echo "Next step: update CHANGELOG.md, then run: just release"
@@ -115,8 +119,8 @@ release:
     # Full quality gate (always run)
     just test
 
-    # Commit Cargo.toml, Cargo.lock and CHANGELOG.md if anything is pending
-    git add Cargo.toml Cargo.lock CHANGELOG.md
+    # Commit the version files (`just bump`, CHANGELOG) if anything is pending
+    git add Cargo.toml Cargo.lock CHANGELOG.md man/rename-simple.1
     git diff --cached --quiet || git commit -m "chore: release ${tag}"
 
     # Annotated tag. An existing one is reused only if it marks HEAD (a rerun

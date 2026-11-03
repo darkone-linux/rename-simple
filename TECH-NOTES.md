@@ -12,7 +12,8 @@ gh auth login      # GitHub token
 ### Steps
 
 ```bash
-# 1. Bump the version (patch | minor | major)
+# 1. Bump the version (patch | minor | major) in Cargo.toml, Cargo.lock and
+#    the man page header
 just bump patch
 
 # 2. Update CHANGELOG.md — add a [x.y.z] section at the top
@@ -22,8 +23,8 @@ just release
 ```
 
 `just release` runs the full quality gate (`just test`), commits
-`Cargo.toml`, `Cargo.lock` and `CHANGELOG.md`, creates an annotated git
-tag, builds the packages (`just package all`), pushes to GitHub, creates a
+`Cargo.toml`, `Cargo.lock`, `CHANGELOG.md` and the man page, creates an
+annotated git tag, builds the packages (`just package all`), pushes to GitHub, creates a
 GitHub Release (notes pulled from `CHANGELOG.md`, static binary and `.deb`
 attached), and publishes to crates.io.
 
