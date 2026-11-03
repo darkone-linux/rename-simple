@@ -263,6 +263,125 @@ fn test_symlinked_destination_never_deletes_the_source() {
     assert!(!stderr.contains("[W]"), "nothing may be deleted here");
 }
 
+/// Two files with the same bytes: `Secret Notes.txt`, private (0600), and its
+/// cleaned name `secret-notes.txt`, writable by anyone (0666).
+fn private_source_and_open_duplicate() -> tempfile::TempDir {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("Secret Notes.txt"), "same bytes").unwrap();
+    fs::write(dir.join("secret-notes.txt"), "same bytes").unwrap();
+    fs::set_permissions(
+        dir.join("Secret Notes.txt"),
+        fs::Permissions::from_mode(0o600),
+    )
+    .unwrap();
+    fs::set_permissions(
+        dir.join("secret-notes.txt"),
+        fs::Permissions::from_mode(0o666),
+    )
+    .unwrap();
+    temp_dir
+}
+
+#[test]
+fn test_duplicate_with_other_permissions_is_not_deleted() {
+    // Deleting the private source would leave only a copy every user can
+    // change, possibly planted beforehand in a shared directory: -D keeps
+    // both, and the error says why.
+    let temp_dir = private_source_and_open_duplicate();
+    let dir = temp_dir.path();
+
+    for flags in ["-nD", "-D"] {
+        let output = cmd()
+            .arg(flags)
+            .arg(dir.join("Secret Notes.txt"))
+            .output()
+            .unwrap();
+
+        assert!(output.status.success());
+        assert!(
+            dir.join("Secret Notes.txt").exists(),
+            "{flags}: the private source must stay"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("[E]") && stderr.contains("permissions"),
+            "{flags}: expected an [E] line about permissions, got: {stderr}"
+        );
+        assert!(
+            !stderr.contains("[W]"),
+            "{flags}: nothing may be deleted: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn test_duplicate_with_other_permissions_does_not_suggest_d() {
+    // -D would not delete this source either: the error must not point at it.
+    let temp_dir = private_source_and_open_duplicate();
+    let dir = temp_dir.path();
+
+    let output = cmd().arg(dir.join("Secret Notes.txt")).output().unwrap();
+
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[E]") && !stderr.contains("-D"),
+        "expected an [E] line without the -D hint, got: {stderr}"
+    );
+}
+
+#[test]
+fn test_duplicate_with_other_group_is_not_deleted() {
+    // Same permission bits, another group: the kept copy would hand the
+    // group's access to other people.
+    use std::os::unix::fs::MetadataExt;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("Group Notes.txt"), "same bytes").unwrap();
+    fs::write(dir.join("group-notes.txt"), "same bytes").unwrap();
+
+    // Any other group the user belongs to will do; without one, or where the
+    // filesystem refuses the change, there is nothing to test.
+    let current = fs::metadata(dir.join("group-notes.txt")).unwrap().gid();
+    let other = std::process::Command::new("id")
+        .arg("-G")
+        .output()
+        .ok()
+        .and_then(|out| String::from_utf8(out.stdout).ok())
+        .and_then(|groups| {
+            groups
+                .split_whitespace()
+                .filter_map(|g| g.parse::<u32>().ok())
+                .find(|&g| g != current)
+        });
+    let Some(other) = other else {
+        eprintln!("skipping: the user belongs to a single group");
+        return;
+    };
+    if std::os::unix::fs::chown(dir.join("group-notes.txt"), None, Some(other)).is_err() {
+        eprintln!("skipping: cannot change the group on this filesystem");
+        return;
+    }
+
+    let output = cmd()
+        .arg("-D")
+        .arg(dir.join("Group Notes.txt"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("Group Notes.txt").exists(), "the source must stay");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[E]") && !stderr.contains("[W]"),
+        "expected an [E] line and no deletion, got: {stderr}"
+    );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Reporting of names that cannot be processed
 // ─────────────────────────────────────────────────────────────────────────────

@@ -24,7 +24,7 @@ slugs.
   (`.tét` is absorbed as `-tet`, `.abcdefghijkl` as `-abcdefghijkl`)
 - Skips hidden files (`.gitignore`, `.DS_Store`…) and reports naming conflicts
 - Reports names that are not valid UTF-8 as errors and leaves them unchanged
-- Optionally (`-D`) deletes a source file that is a byte-for-byte duplicate of an existing target
+- Optionally (`-D`) deletes a source file when the existing target is a byte-for-byte duplicate with the same owner, group and permissions
 - Optional cleanup fixes: repairs mojibake (`-U`), strips HTML tags and entities (`-H`), or both (`-A`)
 
 ## Installation
@@ -167,8 +167,9 @@ $ rename-simple *
 4 entries matched, 0 entry renamed, 2 errors.
 ```
 
-With `-D`, a source that is a distinct regular file with identical content,
-compared byte for byte, is deleted:
+With `-D`, a source is deleted when the destination is a distinct regular file
+with identical content, compared byte for byte, and the same owner, group and
+permissions:
 
 ```bash
 $ rename-simple -D *
@@ -181,10 +182,10 @@ $ rename-simple -D *
 ```
 
 `-A` does not imply `-D`, and `-D` with `-n` only announces the deletion. Every
-other conflict leaves both entries unchanged: different content, a directory,
-a symlink on either side, or two names for the same entry (hard link,
-case-insensitive filesystem). Arguments that would get the same new name are
-all left unchanged.
+other conflict leaves both entries unchanged: different content, a different
+owner, group or permissions, a directory, a symlink on either side, or two
+names for the same entry (hard link, case-insensitive filesystem). Arguments
+that would get the same new name are all left unchanged.
 
 ### Verbose output
 

@@ -55,7 +55,7 @@ not valid UTF-8 is reported as an error and left unchanged.
 An existing entry is never overwritten. When the new name is already taken,
 or when several arguments would get the same new name, the entry is left
 unchanged and an error is reported. The only exception is \fB\-D\fR, for two
-distinct regular files with identical content.
+distinct regular files with identical content, owner, group and permissions.
 .PP
 Each renamed entry is printed as an \fB[R]\fR line on standard output, each
 deleted duplicate as \fB[W]\fR and each error as \fB[E]\fR on standard error,
@@ -92,7 +92,8 @@ Apply all cleanup fixes: \fB\-U\fR and \fB\-H\fR.
 .TP
 \fB\-D\fR, \fB\-\-delete\-duplicates\fR
 When the new name is taken by a distinct regular file with identical content,
-compared byte for byte, delete the source instead of reporting an error.
+compared byte for byte, and the same owner, group and permissions, delete the
+source instead of reporting an error.
 Symbolic links are never compared or deleted. Not implied by \fB\-A\fR.
 .TP
 \fB\-n\fR, \fB\-\-dry\-run\fR

@@ -406,28 +406,23 @@ fn filter_conflicts(ops: Vec<RenameOp>, config: &Config, reporter: &mut Reporter
 /// Decide what to do with an op whose destination is already taken. Nothing is
 /// ever overwritten, and nothing is ever deleted without `-D`.
 ///
-/// When both sides are regular files with byte-for-byte identical content the
-/// rename would only produce a copy of what is already there: the source is a
-/// redundant duplicate, deleted under `-D` (or, with `--dry-run`, merely
-/// announced) and otherwise reported as an error naming the flag that would
-/// clear it. Everything else — differing content, directories, two names for
-/// the same entry — stays a plain error and touches nothing.
+/// When both sides are regular files with byte-for-byte identical content and
+/// the same access rights (`same_access`), the rename would only produce a
+/// copy of what is already there: the source is a redundant duplicate,
+/// deleted under `-D` (or, with `--dry-run`, merely announced) and otherwise
+/// reported as an error naming the flag that would clear it. Everything else
+/// — differing content or access rights, directories, two names for the same
+/// entry — stays a plain error and touches nothing.
 fn resolve_existing(op: &RenameOp, config: &Config, reporter: &mut Reporter) {
     match compare_entries(&op.from, &op.to) {
-        Ok(EntryMatch::Identical) => {
-            if !config.delete_duplicates {
-                reporter.error(
-                    &op.from,
-                    "File name already exists (identical duplicate, use -D to delete the source)",
-                );
-            } else if config.dry_run {
-                reporter.duplicate(&op.from, "Identical duplicate, source would be deleted");
-            } else if let Err(e) = std::fs::remove_file(&op.from) {
-                reporter.error(&op.from, &e.to_string());
-            } else {
-                reporter.duplicate(&op.from, "Identical duplicate, source deleted");
-            }
-        }
+        Ok(EntryMatch::Identical) => match same_access(&op.from, &op.to) {
+            Ok(true) => delete_duplicate(op, config, reporter),
+            Ok(false) => reporter.error(
+                &op.from,
+                "File name already exists (identical content, other owner or permissions)",
+            ),
+            Err(e) => reporter.error(&op.from, &format!("File name already exists ({e})")),
+        },
         Ok(EntryMatch::Different) => {
             reporter.error(&op.from, "File name already exists (2 different files)");
         }
@@ -436,6 +431,41 @@ fn resolve_existing(op: &RenameOp, config: &Config, reporter: &mut Reporter) {
         }
         Err(e) => reporter.error(&op.from, &format!("File name already exists ({e})")),
     }
+}
+
+/// Handle a source that strictly duplicates its destination: delete it under
+/// `-D` (only announce it with `--dry-run`), report the clash otherwise.
+fn delete_duplicate(op: &RenameOp, config: &Config, reporter: &mut Reporter) {
+    if !config.delete_duplicates {
+        reporter.error(
+            &op.from,
+            "File name already exists (identical duplicate, use -D to delete the source)",
+        );
+    } else if config.dry_run {
+        reporter.duplicate(&op.from, "Identical duplicate, source would be deleted");
+    } else if let Err(e) = std::fs::remove_file(&op.from) {
+        reporter.error(&op.from, &e.to_string());
+    } else {
+        reporter.duplicate(&op.from, "Identical duplicate, source deleted");
+    }
+}
+
+/// Whether two regular files grant the same access: same owner, group and
+/// permission bits on Unix, same read-only attribute elsewhere. The copy kept
+/// by `-D` stands in for the deleted source, so it must not give anyone more
+/// or less access: in a shared directory, another user could otherwise plant
+/// an identical copy of their own and end up holding the only one left.
+#[cfg(unix)]
+fn same_access(a: &Path, b: &Path) -> std::io::Result<bool> {
+    use std::os::unix::fs::MetadataExt;
+    let (a, b) = (std::fs::symlink_metadata(a)?, std::fs::symlink_metadata(b)?);
+    Ok(a.uid() == b.uid() && a.gid() == b.gid() && a.mode() & 0o7777 == b.mode() & 0o7777)
+}
+
+#[cfg(not(unix))]
+fn same_access(a: &Path, b: &Path) -> std::io::Result<bool> {
+    let (a, b) = (std::fs::symlink_metadata(a)?, std::fs::symlink_metadata(b)?);
+    Ok(a.permissions().readonly() == b.permissions().readonly())
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
