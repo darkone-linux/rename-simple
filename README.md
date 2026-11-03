@@ -42,6 +42,16 @@ cargo install --locked --path .
 `--locked` builds with the dependency versions of `Cargo.lock`, the ones the
 release was tested and audited with.
 
+### Prebuilt binary
+
+Each [GitHub release](https://github.com/darkone-linux/rename-simple/releases)
+provides a statically linked x86_64 Linux binary, `rename-simple`, and a Debian
+package that installs it with its man page:
+
+```bash
+sudo apt install ./rename-simple_*_amd64.deb
+```
+
 ### With Nix
 
 The repository is a flake, so no Rust toolchain is needed:
@@ -63,9 +73,11 @@ rename-simple [OPTIONS] [files]...
 Each argument is renamed itself, like with `rename`(1). Globbing is left to the
 shell: `rename-simple *.jpg`, or `rename-simple dir/**/*.pdf` with zsh or bash
 `globstar`. An entry named several times, by overlapping globs or as `x` and
-`./x`, is handled once. Files and directories are both renamed by default;
-`-f` / `-d` restrict renaming to one type. Without arguments, `rename-simple`
-prints its help.
+`./x`, is handled once. When a directory and entries inside it are both given,
+the entries inside are renamed first. `.`, `..` and `/` are refused; `dir/.`
+stands for `dir`. Files and directories are both renamed by default; `-f` /
+`-d` restrict renaming to one type. Without arguments, `rename-simple` prints
+its help.
 
 A file name starting with `-` that a glob passes on, such as `-D`, would be
 read as an option: an option that is also the name of an existing entry makes
@@ -89,7 +101,7 @@ the command line invalid. Put `--` before the file names
 
 Renamed entries are printed as `[R]` lines on standard output, deleted
 duplicates (`[W]`) and errors (`[E]`) on standard error, followed by a summary
-line. Control and bidirectional formatting characters in names are printed
+line. Marks are coloured when the output is a terminal. Control and bidirectional formatting characters in names are printed
 escaped (`\n`, `\u{1b}`, `\u{202e}`): a name cannot drive the terminal or add a
 line to the report. Output that cannot be written, for example once the reader
 of a pipe has exited (`| head`), is dropped and every entry is still
@@ -203,6 +215,12 @@ A name that only changes case is not taken: on a case-insensitive filesystem
 (FAT, exFAT, NTFS, APFS), `photo.jpg` designates `Photo.JPG` itself, which is
 renamed through a temporary name, `.rename-simple-<pid>`, in the same
 directory.
+
+The rename itself refuses to overwrite, atomically, on Linux and macOS. On
+Windows, and on filesystems that refuse this atomic rename (NFS, sshfs,
+ntfs-3g), the new name is checked and then the entry is renamed, as `mv -n`
+does: an entry created by another program between the two steps is
+overwritten.
 
 ### Verbose output
 

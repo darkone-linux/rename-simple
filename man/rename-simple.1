@@ -21,7 +21,10 @@ Like \fBrename\fR(1), it acts on the arguments themselves, never on the
 contents of a directory: select entries with shell globbing, such as
 \fI*.jpg\fR, or \fIdir/**/*.pdf\fR with \fBzsh\fR or \fBbash\fR
 \fIglobstar\fR. An entry named several times, by overlapping globs or as
-\fIx\fR and \fI./x\fR, is handled once. Without arguments, it prints its help.
+\fIx\fR and \fI./x\fR, is handled once. When a directory and entries inside it
+are both given, the entries inside are renamed first. \fI.\fR, \fI..\fR and
+\fI/\fR are refused; \fIdir/.\fR stands for \fIdir\fR. Without arguments, it
+prints its help.
 .PP
 A file name starting with a hyphen that a glob passes on, such as \fI\-D\fR,
 would be read as an option: an option that is also the name of an existing
@@ -62,6 +65,12 @@ A name that only changes case is not taken: on a case-insensitive filesystem
 which is renamed through a temporary name, \fI.rename\-simple\-<pid>\fR, in
 the same directory.
 .PP
+The rename itself refuses to overwrite, atomically, on Linux and macOS. On
+Windows, and on filesystems that refuse this atomic rename (NFS, sshfs,
+ntfs\-3g), the new name is checked and then the entry is renamed, as
+\fBmv \-n\fR does: an entry created by another program between the two steps
+is overwritten.
+.PP
 Each renamed entry is printed as an \fB[R]\fR line on standard output, each
 deleted duplicate as \fB[W]\fR and each error as \fB[E]\fR on standard error,
 followed by a summary line. Marks are coloured when the output is a terminal.
@@ -91,7 +100,8 @@ Before renaming, strip HTML tags and decode HTML entities.
 become a space; inline tags (\fI<b>\fR, \fI<i>\fR, \fI<span>\fR...) are
 removed. Text between \fI<\fR and \fI>\fR is a tag only if each of its
 attributes takes a value (\fI<a href="x.html">\fR):
-\fIif a<b and c>d.txt\fR becomes \fIif\-a\-b\-and\-c\-d.txt\fR. Named (\fI&eacute;\fR), decimal (\fI&#233;\fR) and hexadecimal
+\fIif a<b and c>d.txt\fR becomes \fIif\-a\-b\-and\-c\-d.txt\fR.
+Named (\fI&eacute;\fR), decimal (\fI&#233;\fR) and hexadecimal
 (\fI&#xE9;\fR) entities are decoded; any other text is kept. A decoded slash
 (\fI&#47;\fR) is converted like any other character:
 \fIReport &#47; Final.txt\fR becomes \fIreport\-final.txt\fR.
