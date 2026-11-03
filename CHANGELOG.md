@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-11-03
+
+A major release because the exit status changes. The other changes come from a
+review of the whole tool: security fixes, renames that work on case-insensitive
+and network filesystems, and release artefacts that work outside NixOS.
+
+### Changed
+- **Breaking**: the exit status is `1` when at least one entry fails (an `[E]`
+  line), with `-n` and `-q` too; it was `0` whenever the command line was
+  valid. `2` still means an invalid command line, and nothing is renamed then.
+  A script that runs `rename-simple` under `set -e` now stops on a conflict.
+- `-D` deletes a duplicate source only if the kept copy also has the same
+  owner, group and permissions (see Security).
+- An entry named several times (overlapping globs, `x` and `./x`) is handled
+  once, and paths are compared by location: `note-b.txt` and `./note-b.txt`
+  are one destination.
+- The binary attached to the GitHub release and packed in the `.deb` is
+  statically linked (musl).
+- README: install with `cargo install --locked`.
+- Dependencies and the pinned toolchain updated. CI: a Windows job, actions
+  pinned by commit SHA, read-only token.
+
+### Fixed
+- Case-only renames (`Photo.JPG` to `photo.jpg`) on a case-insensitive
+  filesystem (FAT, exFAT, NTFS, APFS) were refused as a name clash. They now go
+  through a temporary name. On Windows, `-D` deleted the only copy instead.
+- On NFS, sshfs or ntfs-3g, which refuse `RENAME_NOREPLACE`, every rename
+  failed with `Invalid argument`. The rename now falls back to a check
+  followed by a rename, as `mv -n` does. On macOS, the rename refuses to
+  overwrite atomically (`RENAME_EXCL`).
+- A closed output (`| head`) aborted the run in the middle of a batch. The
+  remaining entries are now processed.
+- A dangling symlink holding the new name was taken for a free name: the
+  dry-run announced a rename that then failed.
+- The same entry given twice was blocked as a conflict, and a child given as a
+  relative path could be renamed after its parent given as an absolute path,
+  then fail.
+- `-H` deleted the text between an unrelated `<` and `>` (`if a<b and c>d`
+  became `if ad`). A tag now needs a value for each attribute, and a quoted
+  `>` no longer ends it.
+- Every unreadable argument was reported as `No such file or directory`. The
+  real cause is shown: `Broken symbolic link`, `Permission denied`… `.`, `..`
+  and `/` are refused with `Cannot rename ., .. or /`, and `dir/.` is handled
+  as `dir/` (it failed with `Device or resource busy`).
+- The release binary ran only on NixOS (`/nix/store` interpreter), and dpkg
+  rejected the `.deb` (misplaced control file, files owned by uid 1000).
+- `just release` reused an existing tag even on another commit than `HEAD`;
+  it now stops. `just bump` also sets the man page version.
+
+### Security
+- A file name starting with `-` that a glob passes on was read as an option:
+  `rename-simple *` in a directory holding a file named `-D` deleted
+  duplicates. An option that is also the name of an existing entry now makes
+  the command line invalid (exit status `2`): put `--` before the file names,
+  or glob `./*`.
+- Control and bidirectional formatting characters in names are printed
+  escaped (`\n`, `\u{1b}`, `\u{202e}`): a crafted name can no longer drive the
+  terminal or add lines to the report.
+- `-D` could leave only a copy planted by another user, or one with wider
+  permissions: in a shared directory, an identical file owned by someone else
+  replaced the deleted source. The kept copy must now have the same owner,
+  group and permissions.
+
 ## [1.0.0] - 2026-09-29
 
 First stable release. It fixes a renaming regression introduced in 0.7.4. The
