@@ -60,7 +60,8 @@ jobs:
           toolchain: stable
 
       # Only the Windows suite: NTFS is case-insensitive, which is what it
-      # checks (a case-only rename must never pass for a duplicate under -D).
+      # checks (a case-only rename is applied, and never passes for a
+      # duplicate under -D).
       # The other suites exercise Unix behaviour (symlinks, permission bits,
       # invalid UTF-8 names).
       - name: Windows tests

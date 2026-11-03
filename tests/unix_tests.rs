@@ -186,6 +186,30 @@ fn test_hard_link_to_destination_is_not_deleted() {
 }
 
 #[test]
+fn test_hard_link_spelled_in_another_case_is_not_renamed() {
+    // On a case-sensitive filesystem `REPORT.txt` and `report.txt` are two
+    // entries, here two hard links of one file. Renaming would drop one of
+    // the two names: still a conflict, even though both resolve to the same
+    // entry as on a case-insensitive filesystem.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+
+    fs::write(dir.join("report.txt"), "shared").unwrap();
+    fs::hard_link(dir.join("report.txt"), dir.join("REPORT.txt")).unwrap();
+
+    let output = cmd().arg(dir.join("REPORT.txt")).output().unwrap();
+
+    assert!(output.status.success());
+    assert!(dir.join("REPORT.txt").exists(), "hard link must stay");
+    assert!(dir.join("report.txt").exists(), "destination must stay");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[E]"),
+        "expected an [E] line, got: {stderr}"
+    );
+}
+
+#[test]
 fn test_symlink_duplicate_of_its_own_target_is_not_deleted() {
     // A symlink whose cleaned name points at its own target resolves to the
     // same inode: same-entry detection must win over content comparison.

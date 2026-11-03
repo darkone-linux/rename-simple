@@ -186,8 +186,13 @@ $ rename-simple -D *
 `-A` does not imply `-D`, and `-D` with `-n` only announces the deletion. Every
 other conflict leaves both entries unchanged: different content, a different
 owner, group or permissions, a directory, a symlink on either side, or two
-names for the same entry (hard link, case-insensitive filesystem). Arguments
-that would get the same new name are all left unchanged.
+names for the same file (hard links). Arguments that would get the same new
+name are all left unchanged.
+
+A name that only changes case is not taken: on a case-insensitive filesystem
+(FAT, exFAT, NTFS, APFS), `photo.jpg` designates `Photo.JPG` itself, which is
+renamed through a temporary name, `.rename-simple-<pid>`, in the same
+directory.
 
 ### Verbose output
 

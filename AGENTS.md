@@ -105,6 +105,7 @@ summary. `-v` adds `[X]` lines for unchanged entries; `-q` prints nothing.
 - **Conflict detection**: Entries that would rename to the same destination are all left untouched, each reported as an error (`[E]`).
 - **Existing destination**: Never overwritten; the entry is left untouched and reported as an error (`[E]`), except strict duplicates under `-D`.
 - **Strict duplicates**: When source and destination are two regular files with byte-for-byte identical content and the same owner, group and permission bits, `-D` deletes the source (`[W]`); without `-D` the clash stays an error naming the flag. Different access rights stay an error without the hint (the kept copy must not grant other access). Never implied by `-A`.
+- **Case-only renames**: On a case-insensitive filesystem the destination lookup finds the source itself (`SameEntry`) while the directory stores no entry spelled like the new name: renamed through `.rename-simple-<pid>` (rename(2) is a no-op there and `RENAME_NOREPLACE` fails with EEXIST). Two hard links stay a conflict.
 - **Symlinks**: Excluded from duplicate detection (`symlink_metadata`, never followed) — a link is not a copy, and a symlinked destination points outside the operation.
 - **Invalid UTF-8**: Names that are not valid UTF-8 cannot be transformed; reported as an error, entry left untouched.
 - **Hidden files**: Files starting with `.` are ignored.

@@ -62,3 +62,73 @@ fn test_distinct_identical_files_are_still_duplicates() {
 
     assert_eq!(found, EntryMatch::Identical);
 }
+
+/// Names in `dir`, as stored: a lookup is case-insensitive, a listing is not.
+fn names_in(dir: &std::path::Path) -> Vec<String> {
+    fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect()
+}
+
+#[test]
+fn test_case_only_rename_changes_the_case() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("Photo.JPG"), "the only copy").unwrap();
+
+    let output = cmd().arg(dir.join("Photo.JPG")).output().unwrap();
+
+    assert!(output.status.success());
+    assert_eq!(
+        names_in(dir),
+        ["photo.jpg"],
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(dir.join("photo.jpg")).unwrap(),
+        "the only copy"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Photo.JPG -> photo.jpg"),
+        "expected an [R] line, got: {stdout}"
+    );
+}
+
+#[test]
+fn test_case_only_rename_of_a_directory_keeps_its_content() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::create_dir(dir.join("Holidays")).unwrap();
+    fs::write(dir.join("Holidays").join("beach.jpg"), "sand").unwrap();
+
+    let output = cmd().arg(dir.join("Holidays")).output().unwrap();
+
+    assert!(output.status.success());
+    assert_eq!(
+        names_in(dir),
+        ["holidays"],
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(names_in(&dir.join("holidays")), ["beach.jpg"]);
+}
+
+#[test]
+fn test_case_only_dry_run_touches_nothing() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("Photo.JPG"), "the only copy").unwrap();
+
+    let output = cmd().arg("-n").arg(dir.join("Photo.JPG")).output().unwrap();
+
+    assert!(output.status.success());
+    assert_eq!(names_in(dir), ["Photo.JPG"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Photo.JPG -> photo.jpg"),
+        "expected an [R] line, got: {stdout}"
+    );
+}

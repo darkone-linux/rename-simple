@@ -744,7 +744,7 @@ pub enum EntryMatch {
     /// Both paths resolve to the very same filesystem entry (a hard link, a
     /// symlink to the other one, or a case-insensitive filesystem folding the
     /// two names together). Removing either one could destroy the last copy,
-    /// so callers must treat this as a conflict, never as a duplicate.
+    /// so callers must never treat this as a duplicate.
     SameEntry,
     /// Two distinct regular files with byte-for-byte identical content.
     Identical,

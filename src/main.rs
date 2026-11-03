@@ -5,7 +5,7 @@ use rename_files::{
     RenameTarget,
 };
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::io::{IsTerminal, Write};
@@ -411,51 +411,103 @@ impl Reporter {
 // Conflict detection
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Return ops that are safe to apply (no destination conflicts).
+/// A rename that passed the conflict checks.
+struct Rename {
+    op: RenameOp,
+    /// The new name already designates the entry itself: on a case-insensitive
+    /// filesystem, `photo.jpg` is another spelling of `Photo.JPG`. Applied by
+    /// `respell`.
+    same_entry: bool,
+}
+
+/// The names stored in each directory, listed once, on first use. A lookup
+/// may fold case (`photo.jpg` finds `Photo.JPG`); a listing returns the names
+/// as stored.
+#[derive(Default)]
+struct Listings(HashMap<PathBuf, HashSet<OsString>>);
+
+impl Listings {
+    /// Whether the directory holding `path` stores an entry spelled exactly
+    /// like its last component.
+    fn has_entry(&mut self, path: &Path) -> std::io::Result<bool> {
+        let Some(name) = path.file_name() else {
+            return Ok(true);
+        };
+        let dir = match path.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => parent,
+            _ => Path::new("."),
+        };
+        if !self.0.contains_key(dir) {
+            let names = std::fs::read_dir(dir)?
+                .map(|entry| entry.map(|e| e.file_name()))
+                .collect::<std::io::Result<_>>()?;
+            self.0.insert(dir.to_path_buf(), names);
+        }
+        Ok(self.0[dir].contains(name))
+    }
+}
+
+/// Return the renames that are safe to apply (no destination conflicts).
 /// Conflicting ops are reported and dropped.
 ///
-/// An already existing destination is an error, except under `-D` when it is a
-/// strict duplicate of the source (see `resolve_existing`), in which case the
-/// source is deleted instead.
-fn filter_conflicts(ops: Vec<RenameOp>, config: &Config, reporter: &mut Reporter) -> Vec<RenameOp> {
+/// An already existing destination is an error, except when it is the source
+/// itself under another spelling, and under `-D` when it is a strict
+/// duplicate of the source, in which case the source is deleted instead (see
+/// `resolve_existing`).
+fn filter_conflicts(ops: Vec<RenameOp>, config: &Config, reporter: &mut Reporter) -> Vec<Rename> {
     let mut dest_count: HashMap<&Path, usize> = HashMap::with_capacity(ops.len());
     for op in &ops {
         *dest_count.entry(op.to.as_path()).or_insert(0) += 1;
     }
 
-    let keep: Vec<bool> = ops
+    // `Some(same_entry)` keeps the op, `None` drops it.
+    let mut listings = Listings::default();
+    let keep: Vec<Option<bool>> = ops
         .iter()
         .map(|op| {
             if dest_count[op.to.as_path()] > 1 {
                 reporter.error(&op.from, "Multiple entries would produce this name");
-                false
+                None
             } else if op.to.exists() {
-                resolve_existing(op, config, reporter);
-                false
+                resolve_existing(op, config, &mut listings, reporter).then_some(true)
             } else {
-                true
+                Some(false)
             }
         })
         .collect();
 
     ops.into_iter()
         .zip(keep)
-        .filter_map(|(op, keep)| keep.then_some(op))
+        .filter_map(|(op, keep)| keep.map(|same_entry| Rename { op, same_entry }))
         .collect()
 }
 
-/// Decide what to do with an op whose destination is already taken. Nothing is
-/// ever overwritten, and nothing is ever deleted without `-D`.
+/// Decide what to do with an op whose destination is already taken, and
+/// return whether the rename must still happen. Nothing is ever overwritten,
+/// and nothing is ever deleted without `-D`.
 ///
-/// When both sides are regular files with byte-for-byte identical content and
-/// the same access rights (`same_access`), the rename would only produce a
-/// copy of what is already there: the source is a redundant duplicate,
-/// deleted under `-D` (or, with `--dry-run`, merely announced) and otherwise
-/// reported as an error naming the flag that would clear it. Everything else
-/// — differing content or access rights, directories, two names for the same
-/// entry — stays a plain error and touches nothing.
-fn resolve_existing(op: &RenameOp, config: &Config, reporter: &mut Reporter) {
+/// The rename still happens when the destination is the source itself under
+/// another spelling: a case-insensitive filesystem resolves `photo.jpg` to
+/// `Photo.JPG`, yet stores no entry spelled `photo.jpg`. When both sides are
+/// regular files with byte-for-byte identical content and the same access
+/// rights (`same_access`), the rename would only produce a copy of what is
+/// already there: the source is a redundant duplicate, deleted under `-D` (or,
+/// with `--dry-run`, merely announced) and otherwise reported as an error
+/// naming the flag that would clear it. Everything else — differing content or
+/// access rights, directories, two entries of one file (hard links) — stays a
+/// plain error and touches nothing.
+fn resolve_existing(
+    op: &RenameOp,
+    config: &Config,
+    listings: &mut Listings,
+    reporter: &mut Reporter,
+) -> bool {
     match compare_entries(&op.from, &op.to) {
+        Ok(EntryMatch::SameEntry) => match listings.has_entry(&op.to) {
+            Ok(false) => return true,
+            Ok(true) => reporter.error(&op.from, "File name already exists"),
+            Err(e) => reporter.error(&op.from, &format!("File name already exists ({e})")),
+        },
         Ok(EntryMatch::Identical) => match same_access(&op.from, &op.to) {
             Ok(true) => delete_duplicate(op, config, reporter),
             Ok(false) => reporter.error(
@@ -467,11 +519,12 @@ fn resolve_existing(op: &RenameOp, config: &Config, reporter: &mut Reporter) {
         Ok(EntryMatch::Different) => {
             reporter.error(&op.from, "File name already exists (2 different files)");
         }
-        Ok(EntryMatch::SameEntry | EntryMatch::NotComparable) => {
+        Ok(EntryMatch::NotComparable) => {
             reporter.error(&op.from, "File name already exists");
         }
         Err(e) => reporter.error(&op.from, &format!("File name already exists ({e})")),
     }
+    false
 }
 
 /// Handle a source that strictly duplicates its destination: delete it under
@@ -541,18 +594,44 @@ fn rename_no_clobber(from: &Path, to: &Path) -> std::io::Result<()> {
     }
 }
 
-/// Apply a list of rename operations, reporting each result.
-fn apply_ops(ops: &[RenameOp], dry_run: bool, reporter: &mut Reporter) {
-    for op in ops {
+/// Give `from` the name `to` when `to` is another spelling of `from` itself
+/// (`Rename::same_entry`). rename(2) does nothing for two names of one file
+/// and `RENAME_NOREPLACE` sees a clash, so the entry goes through a temporary
+/// name in the same directory. If the second step fails, the entry gets its
+/// original name back.
+fn respell(from: &Path, to: &Path) -> std::io::Result<()> {
+    let temp_name = format!(".rename-simple-{}", process::id());
+    let temp = from.with_file_name(&temp_name);
+    rename_no_clobber(from, &temp)?;
+    let Err(e) = rename_no_clobber(&temp, to) else {
+        return Ok(());
+    };
+    match rename_no_clobber(&temp, from) {
+        Ok(()) => Err(e),
+        Err(_) => Err(std::io::Error::new(
+            e.kind(),
+            format!("{e}, the entry is left as {temp_name}"),
+        )),
+    }
+}
+
+/// Apply the renames, reporting each result.
+fn apply_ops(renames: &[Rename], dry_run: bool, reporter: &mut Reporter) {
+    for Rename { op, same_entry } in renames {
         let to_name = display_name(&op.to);
 
         if dry_run {
             reporter.renamed(&op.from, &to_name);
+            continue;
+        }
+        let result = if *same_entry {
+            respell(&op.from, &op.to)
         } else {
-            match rename_no_clobber(&op.from, &op.to) {
-                Ok(()) => reporter.renamed(&op.from, &to_name),
-                Err(e) => reporter.error(&op.from, &e.to_string()),
-            }
+            rename_no_clobber(&op.from, &op.to)
+        };
+        match result {
+            Ok(()) => reporter.renamed(&op.from, &to_name),
+            Err(e) => reporter.error(&op.from, &e.to_string()),
         }
     }
 }
@@ -597,9 +676,9 @@ fn process_targets(paths: &[PathBuf], config: &Config, reporter: &mut Reporter) 
     // that files and leaf directories are renamed before the directories that
     // contain them. Otherwise renaming a parent first would invalidate the
     // stored child paths and make their renames fail with ENOENT.
-    let mut ops = filter_conflicts(ops, config, reporter);
-    ops.sort_by_cached_key(|op| std::cmp::Reverse(op.from.components().count()));
-    apply_ops(&ops, config.dry_run, reporter);
+    let mut renames = filter_conflicts(ops, config, reporter);
+    renames.sort_by_cached_key(|r| std::cmp::Reverse(r.op.from.components().count()));
+    apply_ops(&renames, config.dry_run, reporter);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
