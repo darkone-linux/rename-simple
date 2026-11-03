@@ -7,7 +7,8 @@ use rename_files::{
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
-use std::io::IsTerminal;
+use std::fmt;
+use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -259,12 +260,37 @@ fn location(path: &Path, tty: bool) -> String {
     }
 }
 
+/// What the reporter knows about one standard stream.
+struct Stream {
+    /// Colours are only used on a terminal.
+    tty: bool,
+    /// Cleared by the first failed write, see `write_line`.
+    open: bool,
+}
+
+impl Stream {
+    fn new(tty: bool) -> Self {
+        Self { tty, open: true }
+    }
+
+    /// Write one line to `handle`, this stream's handle, unless an earlier
+    /// write failed. A failed write (the reader of a pipe is gone, as with
+    /// `| head`, or the disk is full) silences the stream for the rest of the
+    /// run instead of aborting it the way `println!` does: the renames are the
+    /// job, the report only describes them.
+    fn write_line(&mut self, mut handle: impl Write, line: fmt::Arguments<'_>) {
+        if self.open && writeln!(handle, "{line}").is_err() {
+            self.open = false;
+        }
+    }
+}
+
 /// Prints the per-entry lines and the final report, honouring the verbosity
 /// level and disabling colours when the streams are not terminals.
 struct Reporter {
     verbosity: Verbosity,
-    stdout_tty: bool,
-    stderr_tty: bool,
+    stdout: Stream,
+    stderr: Stream,
     renamed: usize,
     duplicates: usize,
     errors: usize,
@@ -275,8 +301,8 @@ impl Reporter {
     fn new(verbosity: Verbosity) -> Self {
         Self {
             verbosity,
-            stdout_tty: std::io::stdout().is_terminal(),
-            stderr_tty: std::io::stderr().is_terminal(),
+            stdout: Stream::new(std::io::stdout().is_terminal()),
+            stderr: Stream::new(std::io::stderr().is_terminal()),
             renamed: 0,
             duplicates: 0,
             errors: 0,
@@ -291,11 +317,14 @@ impl Reporter {
         if self.verbosity == Verbosity::Quiet {
             return;
         }
-        let mark = paint(self.stdout_tty, MAGENTA, "R");
-        let loc = location(from, self.stdout_tty);
+        let mark = paint(self.stdout.tty, MAGENTA, "R");
+        let loc = location(from, self.stdout.tty);
         let name = display_name(from);
-        let arrow = paint(self.stdout_tty, MAGENTA, "->");
-        println!("[{mark}] {loc} {name} {arrow} {to}");
+        let arrow = paint(self.stdout.tty, MAGENTA, "->");
+        self.stdout.write_line(
+            std::io::stdout().lock(),
+            format_args!("[{mark}] {loc} {name} {arrow} {to}"),
+        );
     }
 
     /// Report a source dropped because it duplicates its destination:
@@ -306,11 +335,14 @@ impl Reporter {
         if self.verbosity == Verbosity::Quiet {
             return;
         }
-        let mark = paint(self.stderr_tty, YELLOW, "W");
-        let loc = location(source, self.stderr_tty);
+        let mark = paint(self.stderr.tty, YELLOW, "W");
+        let loc = location(source, self.stderr.tty);
         let name = display_name(source);
-        let arrow = paint(self.stderr_tty, YELLOW, "->");
-        eprintln!("[{mark}] {loc} {name} {arrow} {message}");
+        let arrow = paint(self.stderr.tty, YELLOW, "->");
+        self.stderr.write_line(
+            std::io::stderr().lock(),
+            format_args!("[{mark}] {loc} {name} {arrow} {message}"),
+        );
     }
 
     /// Report a per-entry error: `[E] dir: source -> message`.
@@ -319,11 +351,14 @@ impl Reporter {
         if self.verbosity == Verbosity::Quiet {
             return;
         }
-        let mark = paint(self.stderr_tty, RED, "E");
-        let loc = location(source, self.stderr_tty);
+        let mark = paint(self.stderr.tty, RED, "E");
+        let loc = location(source, self.stderr.tty);
         let name = display_name(source);
-        let arrow = paint(self.stderr_tty, RED, "->");
-        eprintln!("[{mark}] {loc} {name} {arrow} {message}");
+        let arrow = paint(self.stderr.tty, RED, "->");
+        self.stderr.write_line(
+            std::io::stderr().lock(),
+            format_args!("[{mark}] {loc} {name} {arrow} {message}"),
+        );
     }
 
     /// Report an entry that matched but needed no rename: `[X] dir: source`.
@@ -333,14 +368,17 @@ impl Reporter {
         if self.verbosity != Verbosity::Verbose {
             return;
         }
-        let mark = paint(self.stdout_tty, GREEN, "X");
-        let loc = location(source, self.stdout_tty);
+        let mark = paint(self.stdout.tty, GREEN, "X");
+        let loc = location(source, self.stdout.tty);
         let name = display_name(source);
-        println!("[{mark}] {loc} {name}");
+        self.stdout.write_line(
+            std::io::stdout().lock(),
+            format_args!("[{mark}] {loc} {name}"),
+        );
     }
 
     /// Print the final one-line summary. Silent in quiet mode.
-    fn report(&self) {
+    fn report(&mut self) {
         if self.verbosity == Verbosity::Quiet {
             return;
         }
@@ -359,9 +397,12 @@ impl Reporter {
         } else {
             String::new()
         };
-        println!(
-            "{matched} {matched_word} matched, {} {renamed_word} renamed{duplicates}, {} {errors_word}.",
-            self.renamed, self.errors
+        self.stdout.write_line(
+            std::io::stdout().lock(),
+            format_args!(
+                "{matched} {matched_word} matched, {} {renamed_word} renamed{duplicates}, {} {errors_word}.",
+                self.renamed, self.errors
+            ),
         );
     }
 }

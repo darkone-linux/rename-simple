@@ -553,3 +553,76 @@ fn test_bidi_and_c1_controls_in_a_name_are_printed_escaped() {
         "expected the escaped name, got: {stdout:?}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Output that cannot be written (`| head` exited)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A stream whose reader is gone: one end of a socket pair whose other end is
+/// already closed. Every write fails with EPIPE, as with a pipe whose reader
+/// (`| head -1`) has exited, but from the very first byte.
+fn closed_pipe() -> std::process::Stdio {
+    let (writer, reader) = std::os::unix::net::UnixStream::pair().unwrap();
+    drop(reader);
+    std::process::Stdio::from(std::os::fd::OwnedFd::from(writer))
+}
+
+/// Twenty files to rename: a run stopped by its first failed write would
+/// leave most of them behind.
+fn twenty_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    (1..=20)
+        .map(|i| {
+            let path = dir.join(format!("File {i:02}.txt"));
+            fs::write(&path, "x").unwrap();
+            path
+        })
+        .collect()
+}
+
+fn assert_all_renamed(dir: &std::path::Path) {
+    for i in 1..=20 {
+        assert!(
+            dir.join(format!("file-{i:02}.txt")).exists(),
+            "File {i:02}.txt was not renamed"
+        );
+    }
+}
+
+#[test]
+fn test_closed_stdout_does_not_stop_the_renames() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let files = twenty_files(temp_dir.path());
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_rename-simple"))
+        .args(&files)
+        .stdout(closed_pipe())
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{:?}: {stderr}", output.status);
+    assert!(stderr.is_empty(), "nothing to report on stderr: {stderr}");
+    assert_all_renamed(temp_dir.path());
+}
+
+#[test]
+fn test_closed_stderr_does_not_stop_the_renames() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let files = twenty_files(temp_dir.path());
+
+    // The missing entry is reported on stderr before anything is renamed.
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_rename-simple"))
+        .arg(temp_dir.path().join("Missing File.txt"))
+        .args(&files)
+        .stderr(closed_pipe())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success(), "{:?}", output.status);
+    assert_all_renamed(temp_dir.path());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("21 entries matched, 20 entries renamed, 1 error."),
+        "stdout must still carry the report, got: {stdout}"
+    );
+}

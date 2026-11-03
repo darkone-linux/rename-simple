@@ -87,7 +87,9 @@ Renamed entries are printed as `[R]` lines on standard output, deleted
 duplicates (`[W]`) and errors (`[E]`) on standard error, followed by a summary
 line. Control and bidirectional formatting characters in names are printed
 escaped (`\n`, `\u{1b}`, `\u{202e}`): a name cannot drive the terminal or add a
-line to the report. The exit status is `0` when the command line is valid, even if some
+line to the report. Output that cannot be written, for example once the reader
+of a pipe has exited (`| head`), is dropped and every entry is still
+processed. The exit status is `0` when the command line is valid, even if some
 entries fail, and `2` when it is invalid (unknown option, `-f` with `-d`,
 option that is also the name of an existing entry…).
 
