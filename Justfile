@@ -119,9 +119,14 @@ release:
     git add Cargo.toml Cargo.lock CHANGELOG.md
     git diff --cached --quiet || git commit -m "chore: release ${tag}"
 
-    # Annotated tag — only if not already present
-    if git rev-parse "$tag" >/dev/null 2>&1; then
-        echo "Tag $tag already exists — skipping tag creation."
+    # Annotated tag. An existing one is reused only if it marks HEAD (a rerun
+    # after a partial failure): on another commit, the packages built and
+    # published below would not match the tagged code.
+    if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+        if [ "$(git rev-parse "$tag^{commit}")" != "$(git rev-parse HEAD)" ]; then
+            echo "Error: tag $tag exists on another commit than HEAD." >&2; exit 1
+        fi
+        echo "Tag $tag already on HEAD — skipping tag creation."
     else
         git tag -a "$tag" -m "Release ${tag}"
     fi
