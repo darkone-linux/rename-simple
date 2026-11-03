@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-11-03
+
+The summary line now tells the truth under `-n`. A script that reads it sees
+new wording.
+
+### Changed
+- README and man page: entries inside a directory are renamed before the
+  directory; `.`, `..` and `/` are refused, `dir/.` stands for `dir`; the
+  rename never overwrites, atomically on Linux and macOS, through a check then
+  a rename elsewhere (Windows, NFS, sshfs, ntfs-3g). The README lists the
+  prebuilt binary and `.deb` of each GitHub release, and says that marks are
+  coloured on a terminal.
+
+### Fixed
+- With `-n`, the summary claimed that entries were renamed and duplicates
+  removed, although nothing had changed. It now says what would happen:
+  `4 entries matched, 0 entry would be renamed, 1 duplicate would be deleted,
+  1 error.`
+- The summary counted deleted duplicates as `removed`, while `-D` and the
+  `[W]` line say deleted. It now reads `1 duplicate deleted`.
+- `just package` and `just release` verified the crate in the shared
+  `target/` directory. That build took over the binary's fingerprint, so
+  edits to `src/` no longer rebuilt it and the CLI tests ran an outdated
+  binary. The verification now builds in `target/package-verify/`.
+
 ## [2.0.0] - 2026-11-03
 
 A major release because the exit status changes. The other changes come from a
