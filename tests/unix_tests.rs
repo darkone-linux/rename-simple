@@ -74,6 +74,39 @@ fn test_dangling_symlink_is_left_alone() {
     assert!(fs::symlink_metadata(dir.join("Dangling Link.txt")).is_ok());
 }
 
+#[test]
+fn test_dangling_symlink_at_the_destination_takes_the_name() {
+    // `my-file.txt` points to nothing, but the name is taken all the same: the
+    // dry-run must not announce a rename, and the real run must report the
+    // clash rather than a raw "File exists" from the kernel.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir.path();
+    fs::write(dir.join("My File.txt"), "content").unwrap();
+    std::os::unix::fs::symlink("does-not-exist", dir.join("my-file.txt")).unwrap();
+
+    for args in [&["-n"][..], &[]] {
+        let output = cmd()
+            .args(args)
+            .arg(dir.join("My File.txt"))
+            .output()
+            .unwrap();
+
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!stdout.contains("[R]"), "{args:?}: no rename: {stdout}");
+        assert!(
+            stderr.contains("[E]") && stderr.contains("File name already exists"),
+            "{args:?}: expected the name clash, got: {stderr}"
+        );
+    }
+    assert!(dir.join("My File.txt").exists());
+    assert!(fs::symlink_metadata(dir.join("my-file.txt"))
+        .unwrap()
+        .file_type()
+        .is_symlink());
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Failure modes — read-only parent (audit M3 surface)
 // ─────────────────────────────────────────────────────────────────────────────

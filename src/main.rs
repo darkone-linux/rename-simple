@@ -468,7 +468,7 @@ fn filter_conflicts(ops: Vec<RenameOp>, config: &Config, reporter: &mut Reporter
             if dest_count[op.to.as_path()] > 1 {
                 reporter.error(&op.from, "Multiple entries would produce this name");
                 None
-            } else if op.to.exists() {
+            } else if taken(&op.to) {
                 resolve_existing(op, config, &mut listings, reporter).then_some(true)
             } else {
                 Some(false)
@@ -480,6 +480,13 @@ fn filter_conflicts(ops: Vec<RenameOp>, config: &Config, reporter: &mut Reporter
         .zip(keep)
         .filter_map(|(op, keep)| keep.map(|same_entry| Rename { op, same_entry }))
         .collect()
+}
+
+/// Whether an entry already holds the name `path`, whatever it is. A symlink
+/// pointing nowhere takes its name all the same, which `Path::exists` misses
+/// since it follows the link.
+fn taken(path: &Path) -> bool {
+    path.symlink_metadata().is_ok()
 }
 
 /// Decide what to do with an op whose destination is already taken, and
@@ -568,14 +575,14 @@ fn same_access(a: &Path, b: &Path) -> std::io::Result<bool> {
 
 /// Rename `from` to `to`, refusing to overwrite an existing destination.
 ///
-/// Closes the TOCTOU window between the `op.to.exists()` pre-check in
+/// Closes the TOCTOU window between the `taken` pre-check in
 /// `filter_conflicts` and the actual rename:
 ///
 /// - **Linux**: `renameat2(AT_FDCWD, from, AT_FDCWD, to, RENAME_NOREPLACE)`
 ///   via `rustix` — atomic at the syscall level.
-/// - **Other Unix / Windows**: a pre-check `try_exists` followed by
-///   `std::fs::rename`. The race window remains in theory, but
-///   `std::fs::rename` on Windows is already non-clobbering.
+/// - **Other Unix / Windows**: the same check as `taken`, then
+///   `std::fs::rename`, which replaces an existing destination: an entry
+///   created between the two calls would be overwritten.
 fn rename_no_clobber(from: &Path, to: &Path) -> std::io::Result<()> {
     #[cfg(target_os = "linux")]
     {
@@ -584,13 +591,14 @@ fn rename_no_clobber(from: &Path, to: &Path) -> std::io::Result<()> {
     }
     #[cfg(not(target_os = "linux"))]
     {
-        if to.try_exists()? {
-            return Err(std::io::Error::new(
+        match to.symlink_metadata() {
+            Ok(_) => Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
                 "destination exists",
-            ));
+            )),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => std::fs::rename(from, to),
+            Err(e) => Err(e),
         }
-        std::fs::rename(from, to)
     }
 }
 
